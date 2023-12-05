@@ -83,12 +83,20 @@ public class Vod {
         this.vodName = vodName;
     }
 
+    public String getVodName() {
+        return vodName;
+    }
+
     public void setVodPic(String vodPic) {
         this.vodPic = vodPic;
     }
 
     public void setVodRemarks(String vodRemarks) {
         this.vodRemarks = vodRemarks;
+    }
+
+    public String getVodRemarks() {
+        return vodRemarks;
     }
 
     public void setVodYear(String vodYear) {
@@ -117,6 +125,10 @@ public class Vod {
 
     public void setVodPlayFrom(String vodPlayFrom) {
         this.vodPlayFrom = vodPlayFrom;
+    }
+
+    public String getVodPlayFrom() {
+        return vodPlayFrom;
     }
 
     public void setVodPlayUrl(String vodPlayUrl) {

@@ -109,6 +109,8 @@ public class AList extends Spider {
 
         for (Item item : folders) list.add(item.getVod(tid, vodPic));
         for (Item item : files) list.add(item.getVod(tid, vodPic));
+        Vod.Style style= Vod.Style.rect();
+        for (Vod vod : list) vod.setStyle(style);
         return Result.get().vod(list).page().string();
     }
 

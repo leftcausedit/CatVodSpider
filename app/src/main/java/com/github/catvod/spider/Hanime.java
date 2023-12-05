@@ -43,13 +43,14 @@ public class Hanime extends Spider {
         List<Vod> list = new ArrayList<>();
         List<Class> classes = new ArrayList<>();
         LinkedHashMap<String, List<Filter>> filters = new LinkedHashMap<>();
-        Document doc1 = Jsoup.parse(OkHttp.string(siteUrl.concat("/search?genre=裏番"), getHeaders()));
+        Document doc1 = Jsoup.parse(OkHttp.string(siteUrl.concat("/search?tags%5B%5D=耽美"), getHeaders()));
         List<String> sorts = doc1.select("div.hentai-sort-options-wrapper").eachText();
         List<String> years = doc1.getElementById("year").select("option").eachAttr("value");
         Document doc2 = Jsoup.parse(OkHttp.string(siteUrl, getHeaders()));
         for (Element element : doc2.select("a.nav-item")) {
             String text = element.text();
-            if (text.equals("新番預告") || text.equals("H漫畫")) continue;
+            if (text.equals("新番預告")) continue;
+            if (text.equals("H漫畫")) text = "全部";
             classes.add(new Class(text));
             List<Filter> array = new ArrayList<>();
             array.add(getFilter("排序", "by", sorts));
@@ -74,7 +75,7 @@ public class Hanime extends Spider {
         List<Vod> list = new ArrayList<>();
         if (extend.get("by") == null) extend.put("by", "最新上市");
         if (extend.get("year") == null) extend.put("year", "");
-        String target = siteUrl.concat("/search?genre=").concat(tid).concat("&page=").concat(pg).concat("&sort=").concat(extend.get("by")).concat("&year=").concat(extend.get("year"));
+        String target = siteUrl.concat("/search?genre=").concat(tid).concat("&page=").concat(pg).concat("&tags%5B%5D=耽美").concat("&sort=").concat(extend.get("by")).concat("&year=").concat(extend.get("year"));
         Document doc = Jsoup.parse(OkHttp.string(target, getHeaders()));
         for (Element element : doc.select("div.col-xs-6")) {
             String pic = element.select("img").get(1).attr("src");

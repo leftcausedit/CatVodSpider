@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.Collections;
 
 import okhttp3.Dns;
 import okhttp3.Headers;
@@ -63,6 +64,10 @@ public class OkHttp {
 
     public static String string(OkHttpClient client, String url, Map<String, String> params, Map<String, String> header) {
         return url.startsWith("http") ? new OkRequest(GET, url, params, header).execute(client).getBody() : "";
+    }
+
+    public static OkResult getResult(String url) {
+        return url.startsWith("http") ? new OkRequest(GET, url, Collections.emptyMap(), null).execute(client()) : new OkResult();
     }
 
     public static String post(String url, Map<String, String> params) {

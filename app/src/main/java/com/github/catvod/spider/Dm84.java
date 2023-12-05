@@ -9,6 +9,7 @@ import com.github.catvod.bean.Vod;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Utils;
+import com.github.catvod.danmaku.Danmaku;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -28,6 +29,7 @@ import java.util.Map;
 public class Dm84 extends Spider {
 
     private static final String siteUrl = "https://dm84.tv";
+    private Vod currentVod;
 
     private HashMap<String, String> getHeaders() {
         HashMap<String, String> headers = new HashMap<>();
@@ -68,7 +70,9 @@ public class Dm84 extends Spider {
             doc = Jsoup.parse(OkHttp.string(siteUrl + "/list-" + item.getTypeId() + ".html", getHeaders()));
             Elements elements = doc.select("ul.list_filter > li > div");
             List<Filter> array = new ArrayList<>();
-            array.add(getFilter("類型", "type", elements.get(0).select("a").eachText()));
+            List<String> textList = elements.get(0).select("a").eachText();
+            textList.add("耽美");
+            array.add(getFilter("類型", "type", textList));
             array.add(getFilter("時間", "year", elements.get(1).select("a").eachText()));
             array.add(getFilter("排序", "by", elements.get(2).select("a").eachText()));
             filters.put(item.getTypeId(), array);
@@ -151,6 +155,7 @@ public class Dm84 extends Spider {
             vod.setVodPlayFrom(TextUtils.join("$$$", sites.keySet()));
             vod.setVodPlayUrl(TextUtils.join("$$$", sites.values()));
         }
+        currentVod = vod;
         return Result.string(vod);
     }
 
@@ -171,9 +176,13 @@ public class Dm84 extends Spider {
     }
 
     @Override
-    public String playerContent(String flag, String id, List<String> vipFlags) {
+    public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
         Document doc = Jsoup.parse(OkHttp.string(siteUrl.concat(id), getHeaders()));
         String url = doc.select("iframe").attr("src");
-        return Result.get().url(url).parse().header(getHeaders()).string();
+       
+        String title = currentVod.getVodName();
+        //Utils.notify(id + title);
+        int episodeNum = Integer.parseInt(id.split("/")[2].split("-")[2].split("\\.")[0]);
+        return Result.get().url(url).parse().danmaku(Danmaku.getDanmaku(title, episodeNum)).header(getHeaders()).string();
     }
 }

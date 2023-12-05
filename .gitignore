@@ -4,3 +4,4 @@
 *.jks
 *ni.java
 /local.properties
+/*.log

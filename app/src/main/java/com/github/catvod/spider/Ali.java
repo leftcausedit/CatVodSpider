@@ -21,7 +21,7 @@ import java.util.regex.Pattern;
  */
 public class Ali extends Spider {
 
-    public static final Pattern pattern = Pattern.compile("www.aliyundrive.com/s/([^/]+)(/folder/([^/]+))?");
+    public static final Pattern pattern = Pattern.compile("(www.aliyundrive.com|www.alipan.com)/s/([^/]+)(/folder/([^/]+))?");
 
     @Override
     public void init(Context context, String extend) {
@@ -41,8 +41,8 @@ public class Ali extends Spider {
     }
 
     private Vod parseVod(Matcher matcher, String id) {
-        String shareId = matcher.group(1);
-        String fileId = matcher.groupCount() == 3 ? matcher.group(3) : "";
+        String shareId = matcher.group(2);
+        String fileId = matcher.groupCount() == 4 ? matcher.group(4) : "";
         return AliYun.get().getVod(id, shareId, fileId);
     }
 
@@ -54,11 +54,11 @@ public class Ali extends Spider {
      */
     public String detailContentVodPlayFrom(List<String> ids) {
         List<String> playFrom = new ArrayList<>();
-        if (ids.size() < 2) return TextUtils.join("$$$", Arrays.asList("原畫", "普畫", "極速"));
+        if (ids.size() < 2) return TextUtils.join("$$$", Arrays.asList("轉存原畫", "分享原畫", "代理普畫"));
         for (int i = 1; i <= ids.size(); i++) {
-            playFrom.add(String.format(Locale.getDefault(), "原畫#%02d", i));
-            playFrom.add(String.format(Locale.getDefault(), "普畫#%02d", i));
-            playFrom.add(String.format(Locale.getDefault(), "極速#%02d", i));
+            playFrom.add(String.format(Locale.getDefault(), "轉存原畫#%02d", i));
+            playFrom.add(String.format(Locale.getDefault(), "分享原畫#%02d", i));
+            playFrom.add(String.format(Locale.getDefault(), "代理普畫#%02d", i));
         }
         return TextUtils.join("$$$", playFrom);
     }
@@ -80,8 +80,8 @@ public class Ali extends Spider {
 
     public static Object[] proxy(Map<String, String> params) throws Exception {
         String type = params.get("type");
+        if ("video".equals(type)) return AliYun.get().proxyVideo(params);
         if ("sub".equals(type)) return AliYun.get().proxySub(params);
-        if ("token".equals(type)) return AliYun.get().getToken();
         return null;
     }
 }

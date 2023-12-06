@@ -35,6 +35,7 @@ public class Emby extends Spider {
     private Vod.Style landscapeStyle;
     private String currentVodName;
     private String currentEpisodeNumber;
+    private String isDanmu;
 
     @Override
     public void init(Context context, String extend) throws Exception{
@@ -61,6 +62,7 @@ public class Emby extends Spider {
         }
         this.getItemUrl = this.siteUrl + "/Users/" + this.userId + "/Items" + this.apikey + "&Recursive=true&limit=20&Fields=MediaStreams&IncludeItemTypes=";
         this.homeContentType = siteOb.optString("homeContentType");
+        this.isDanmu = siteOb.optString("danmu");
         this.landscapeStyle = Vod.Style.rect(1.777f);
     }
     
@@ -71,12 +73,6 @@ public class Emby extends Spider {
         header.put("Content-Type", "application/json");
         return header;
     }
-
-    // private Map<String,String> getHeader() {
-    //     Map<String, String> header = new HashMap<>();
-    //     header.put("X-Emby-Token", accessToken);
-    //     return header;
-    // }
 
     @Override
     public String homeContent(boolean filter) throws Exception {
@@ -132,19 +128,52 @@ public class Emby extends Spider {
 
         }
         JSONArray items = new JSONObject(OkHttp.string(cateUrl)).optJSONArray("Items");
-        List<Vod> list = parseVodList(items);
+        List<Vod> list = new ArrayList<Vod>();
+        if (tid.equals("link")) {
+            list = parseVodList(items, true);
+        } else {
+            list = parseVodList(items, false);
+        }
         int page = Integer.parseInt(pg), count = Integer.MAX_VALUE, limit = 20, total = Integer.MAX_VALUE;
         return Result.get().vod(list).page(page, count, limit, total).string();
     }
 
-    private List<Vod> parseVodList(JSONArray items) throws Exception {
+    private List<Vod> parseVodList(JSONArray items) throws Exception{
+        return parseVodList(items, false);
+    }
+
+    private List<Vod> parseVodList(JSONArray items, boolean ifAddCustomVod) throws Exception {
         List<Vod> list = new ArrayList<>();
+        Vod customVod = new Vod();
+        StringBuilder customVodUrlBuilder = new StringBuilder();
+        String vodPlayUrl;
+        int customVodCount = 0;
         for (int i = 0; i < items.length(); i++) {
             JSONObject item = items.optJSONObject(i);
             Vod vod = parseVod(item).getKey();
             boolean skip = parseVod(item).getValue();
             if (skip == true) continue;
+
+            // if (vod.getTypeName().equals("Photo") || vod.getTypeName().equals("PhotoAlbum") || vod.getTypeName().equals("Video")) {
+            //     if (OkHttp.getResult(vod.getVodPic()).getCode() != 200) {
+            //         continue;
+            //     }
+            // }
+
+            if (ifAddCustomVod && vod.getTypeName().equals("Video")) {
+                customVodCount++;
+                vodPlayUrl = siteUrl + "/Videos/"+ item.optString("Id") +"/stream."+item.optString("Container") + apikey + "&static=true";
+                customVodUrlBuilder.append(item.optString("Name")).append("$").append(vodPlayUrl).append("#");
+            }
+
             list.add(vod);
+        }
+        if (ifAddCustomVod && customVodCount > 0) {
+            customVod.setVodName("Emby");
+            customVod.setVodId(Utils.substring(customVodUrlBuilder.toString(),1) + "/{customVod}");
+            customVod.setVodRemarks("视频合集");
+            customVod.setVodPic("https://cdn-icons-png.flaticon.com/512/1179/1179120.png");
+            list.add(0, customVod);
         }
         return list;
     }
@@ -155,6 +184,7 @@ public class Emby extends Spider {
         String picUrl = siteUrl + "/Items/"+item.optString("Id")+"/Images/Primary";
         vod.setVodPic(picUrl);
         String vodType = item.optString("Type");
+        vod.setTypeName(vodType);
         vod.setVodId(item.optString("Id"));
         if (vodType.equals("Video")) {
             String durationString = item.optString("RunTimeTicks", "");
@@ -197,6 +227,13 @@ public class Emby extends Spider {
     @Override
     public String detailContent(List<String> ids) throws Exception {
         String id = ids.get(0);
+        if (id.endsWith("/{customVod}")) {
+            Vod vod = new Vod();
+            vod.setVodName("All Videos");
+            vod.setVodPlayFrom("Emby");
+            vod.setVodPlayUrl(Utils.substring(id,12));
+            return Result.string(vod);
+        }
         String searchUrl = siteUrl + "/Users/" + userId + "/Items/" + id + apikey;
         JSONObject item = new JSONObject(OkHttp.string(searchUrl));
         Vod vod = new Vod();
@@ -262,7 +299,8 @@ public class Emby extends Spider {
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
-        return Result.get().url(id).danmaku(Danmaku.getDanmaku(currentVodName, Integer.parseInt(currentEpisodeNumber))).string();
+        if (this.isDanmu.equals("true")) return Result.get().url(id).danmaku(Danmaku.getDanmaku(currentVodName, Integer.parseInt(currentEpisodeNumber))).string();
+        else return Result.get().url(id).string();
     }
     
     private String timeConvert(String durationString){

@@ -75,6 +75,10 @@ public class Vod {
         this.typeName = typeName;
     }
 
+    public String getTypeName() {
+        return typeName;
+    }
+
     public void setVodId(String vodId) {
         this.vodId = vodId;
     }
@@ -89,6 +93,10 @@ public class Vod {
 
     public void setVodPic(String vodPic) {
         this.vodPic = vodPic;
+    }
+
+    public String getVodPic() {
+        return vodPic;
     }
 
     public void setVodRemarks(String vodRemarks) {

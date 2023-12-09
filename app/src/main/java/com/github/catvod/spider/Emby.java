@@ -36,6 +36,7 @@ public class Emby extends Spider {
     private String currentVodName;
     private String currentEpisodeNumber;
     private String isDanmu;
+    private String defaultParentId;
 
     @Override
     public void init(Context context, String extend) throws Exception{
@@ -64,6 +65,7 @@ public class Emby extends Spider {
         this.homeContentType = siteOb.optString("homeContentType");
         this.isDanmu = siteOb.optString("danmu");
         this.landscapeStyle = Vod.Style.rect(1.777f);
+        this.defaultParentId = siteOb.optString("defaultParentId", "");
     }
     
     private Map<String, String> postHeader() {
@@ -81,7 +83,7 @@ public class Emby extends Spider {
         List<String> typeNames = Arrays.asList("家庭媒体", "电影剧集","最爱", "搜索");
         for (int i = 0; i < typeIds.size(); i++) classes.add(new Class(typeIds.get(i), typeNames.get(i)));
         
-        String searchUrl = getItemUrl + homeContentType + "&SortBy=Random";
+        String searchUrl = getItemUrl + homeContentType + "&SortBy=Random" + "&parentid=" + defaultParentId;
         JSONArray items = new JSONObject(OkHttp.string(searchUrl)).optJSONArray("Items");
         return Result.get().vod(parseVodList(items)).classes(classes).filters(myFilters).string(); 
     }
@@ -99,32 +101,33 @@ public class Emby extends Spider {
             tid = !tid.contains("@") ? tid : tid.split("@")[0];
         }
         int start = (Integer.parseInt(pg) - 1) * 20;
-        String cateUrl, itemType, sortOrder, sortBy;
+        String cateUrl, itemType, sortOrder, sortBy, parentId;
         sortOrder = extend.get("order") == null ? "Ascending" : extend.get("order");
         sortBy = extend.get("sort") == null ? "SortName" : extend.get("sort");
+        parentId = extend.get("parentId") == null ? defaultParentId : extend.get("parentId");
         switch (tid) {
             case "link": //mixed
                 linkSort = linkMark.equals("PhotoAlbum") ? "&SortBy=Container,SortName" : linkSort;
                 linkSort = linkMark.equals("Season") ? "" : linkSort;
                 // cateUrl = siteUrl + "/Users/" + userId + "/Items" + apikey + "&Fields=MediaStreams" + linkSort + "&parentid=" + linkValue + "&limit=20&startindex=" + start + "&ExcludeItemIds=" + linkValue;
-                cateUrl = siteUrl + "/Users/" + userId + "/Items" + apikey + "&Fields=MediaStreams" + linkSort + "&parentid=" + linkValue + "&ExcludeItemIds=" + linkValue;
+                cateUrl = siteUrl + "/Users/" + userId + "/Items" + apikey + "&Fields=MediaStreams" + linkSort + "&parentid=" + linkValue + "&ExcludeItemIds=" + linkValue ;
                 break;
             case "Favourite":
                 itemType = extend.get("type") == null ? "PhotoAlbum,Movie,Series" : extend.get("type");
-                cateUrl = siteUrl + "/Users/" + userId + "/Items" + apikey + "&Recursive=true&Fields=MediaStreams&SortBy=Random&limit=20&Filters=IsFavorite&IncludeItemTypes=" + itemType + "&startindex=" + start;
+                cateUrl = siteUrl + "/Users/" + userId + "/Items" + apikey + "&Recursive=true&Fields=MediaStreams&SortBy=Random&limit=20&Filters=IsFavorite&IncludeItemTypes=" + itemType + "&startindex=" + start + "&parentid=" + parentId;
                 break;
             case "search":
                 return searchContent(searchKey, true, pg);
             case "Movie&Series":
                 itemType = extend.get("type") == null ? "Movie,Series" : extend.get("type");
-                cateUrl = getItemUrl + itemType + "&startindex=" + start + "&SortOrder=" + sortOrder + "&SortBy=" + sortBy;
+                cateUrl = getItemUrl + itemType + "&startindex=" + start + "&SortOrder=" + sortOrder + "&SortBy=" + sortBy + "&parentid=" + parentId;
                 break;
             case "HomeMedia":
                 itemType = extend.get("type") == null ? "PhotoAlbum" : extend.get("type");
-                cateUrl = getItemUrl + itemType + "&startindex=" + start + "&SortOrder=" + sortOrder + "&SortBy=" + sortBy;
+                cateUrl = getItemUrl + itemType + "&startindex=" + start + "&SortOrder=" + sortOrder + "&SortBy=" + sortBy + "&parentid=" + parentId;
                 break;
             default:
-                cateUrl = getItemUrl + tid + "&startindex=" + start;
+                cateUrl = getItemUrl + tid + "&startindex=" + start + "&parentid=" + parentId;
                 break;
 
         }
@@ -155,12 +158,6 @@ public class Emby extends Spider {
             Vod vod = parseVod(item).getKey();
             boolean skip = parseVod(item).getValue();
             if (skip == true) continue;
-
-            // if (vod.getTypeName().equals("Photo") || vod.getTypeName().equals("PhotoAlbum") || vod.getTypeName().equals("Video")) {
-            //     if (OkHttp.getResult(vod.getVodPic()).getCode() != 200) {
-            //         continue;
-            //     }
-            // }
 
             if (ifAddCustomVod && vod.getTypeName().equals("Video")) {
                 customVodCount++;

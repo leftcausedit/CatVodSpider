@@ -27,3 +27,8 @@ rd /s/q "%~dp0\spider.jar\build"
 rd /s/q "%~dp0\spider.jar\smali"
 rd /s/q "%~dp0\spider.jar\dist"
 rd /s/q "%~dp0\Smali_classes"
+
+copy "%~dp0\custom_spider.jar" "%~dp0\lefty.jar"
+
+copy "%~dp0\lefty.jar" "D:\filestation\config\tvbox\jar\"
+

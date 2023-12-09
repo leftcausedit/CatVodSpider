@@ -106,7 +106,8 @@ public class Emby extends Spider {
             case "link": //mixed
                 linkSort = linkMark.equals("PhotoAlbum") ? "&SortBy=Container,SortName" : linkSort;
                 linkSort = linkMark.equals("Season") ? "" : linkSort;
-                cateUrl = siteUrl + "/Users/" + userId + "/Items" + apikey + "&Fields=MediaStreams" + linkSort + "&parentid=" + linkValue + "&limit=20&startindex=" + start + "&ExcludeItemIds=" + linkValue;
+                // cateUrl = siteUrl + "/Users/" + userId + "/Items" + apikey + "&Fields=MediaStreams" + linkSort + "&parentid=" + linkValue + "&limit=20&startindex=" + start + "&ExcludeItemIds=" + linkValue;
+                cateUrl = siteUrl + "/Users/" + userId + "/Items" + apikey + "&Fields=MediaStreams" + linkSort + "&parentid=" + linkValue + "&ExcludeItemIds=" + linkValue;
                 break;
             case "Favourite":
                 itemType = extend.get("type") == null ? "PhotoAlbum,Movie,Series" : extend.get("type");
@@ -131,6 +132,7 @@ public class Emby extends Spider {
         List<Vod> list = new ArrayList<Vod>();
         if (tid.equals("link")) {
             list = parseVodList(items, true);
+            return Result.get().vod(list).page().string();
         } else {
             list = parseVodList(items, false);
         }

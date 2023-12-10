@@ -38,6 +38,10 @@ public class OkHttp {
         return get().client = getBuilder().build();
     }
 
+    public static OkHttpClient customTimeoutClient(int timeout) {
+        return client().newBuilder().connectTimeout(timeout, TimeUnit.SECONDS).build();
+    }
+
     public static OkHttpClient noRedirect() {
         return client().newBuilder().followRedirects(false).followSslRedirects(false).build();
     }
@@ -52,6 +56,10 @@ public class OkHttp {
 
     public static String string(String url) {
         return string(url, null);
+    }
+
+    public static String string(String url, int timeout) {
+        return string(customTimeoutClient(timeout), url, null, null);
     }
 
     public static String string(String url, Map<String, String> header) {
@@ -106,6 +114,6 @@ public class OkHttp {
     }
 
     public static OkHttpClient.Builder getBuilder() {
-        return new OkHttpClient.Builder().addInterceptor(new OkhttpInterceptor()).dns(dns()).connectTimeout(30, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).writeTimeout(30, TimeUnit.SECONDS).hostnameVerifier((hostname, session) -> true).sslSocketFactory(new SSLCompat(), SSLCompat.TM);
+        return new OkHttpClient.Builder().addInterceptor(new OkhttpInterceptor()).dns(dns()).connectTimeout(10, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).writeTimeout(30, TimeUnit.SECONDS).hostnameVerifier((hostname, session) -> true).sslSocketFactory(new SSLCompat(), SSLCompat.TM);
     }
 }

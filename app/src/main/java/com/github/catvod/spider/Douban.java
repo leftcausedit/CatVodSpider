@@ -48,6 +48,7 @@ public class Douban extends Spider {
     private String isCmsOrdered;
     private String myFilter;
     private JSONArray cmsArray;
+    private List<Integer> errorCmsSite = new ArrayList<>();
 
     private Map<String, String> getHeader() {
         Map<String, String> header = new HashMap<>();
@@ -631,22 +632,63 @@ public class Douban extends Spider {
     }
 
     public String searchContent(String key, boolean quick, String pg, int count) throws Exception {
-        tagName = key; //搜索分类页
+        // tagName 存储搜索关键词, 在分类页中调用展示更多搜索内容
+        tagName = key;
+
+        // 豆瓣条目搜索, 没有页数的限制, 但是一页只能显示五个项目
+        // start 指每次翻页后请求豆瓣项目的开始位置, count 指一页展示的豆瓣条目数
         int start = (Integer.parseInt(pg) - 1) * count;
+        // 为 try-catch 块声明 initList
+        List<Vod> initList;
+        // 豆瓣搜索请求的 URL
         String searchUrl = siteUrl + "/search/subjects" + apikey + "&q=" + key + "&count=" + Integer.toString(count) + "&start=" + start;
-        JSONArray array = new JSONObject(OkHttp.string(searchUrl, getHeader())).optJSONArray("items");
-        List<Vod> list = parseVodListFromJSONArraySearch(array);
+        // try-catch 块保证豆瓣请求出错时, 依然获取 cms 采集站的搜索数据
+        try {
+            // 获取豆瓣数据并解析获得 List<Vod>
+            JSONArray array = new JSONObject(OkHttp.string(searchUrl, getHeader())).optJSONArray("items");
+            initList = parseVodListFromJSONArraySearch(array);
+        } catch (Exception e) {
+            initList = new ArrayList<>();
+        }
+        // 为后面 lambda 表达式创建隐式 final 类型的 list
+        List<Vod> list = initList;
+        // 只有第一和第二页执行下面的逻辑, 获取 cms 采集站的搜索数据
+        if (!pg.equals("1") && !pg.equals("2")) return Result.string(list);
+
+        // 在第一页和第二页获取 cms 采集站的搜索数据
+        // 第一页的超时时间设置为 5 秒, 第二页的超时时间为 10 秒 , 为 if-else 块初始化变量 timeout
+        int firstTimeout = 5, secondTimeout = 10, timeout;
+        // 第一页清除 cms 站报错记录, 因为第一页对所有站发起请求, 防止以前搜索的数据残留
+        if (pg.equals("1")) {
+            errorCmsSite.clear();
+            timeout = firstTimeout;
+        } else timeout = secondTimeout;
+
+        // 多线程运行, 由于每个循环 (代表每个 cms 站点) 中的 Http 请求可以并行执行, 可以节省大量的时间
+        // 按照站点的数量初始化线程池
         ExecutorService executorService = Executors.newFixedThreadPool(cmsArray.length());
+
         for (int i = 0; i < cmsArray.length(); i++) {
+            // 在第二页判断, 如果在第一页中返回错误, 则继续执行逻辑; 否则该循环结束
+            if (pg.equals("2") && !errorCmsSite.contains(i)) {
+                errorCmsSite.remove(Integer.valueOf(i));
+                continue;
+            }
+
+            // cms 站点 URL, 名称, 搜索 URL
             String cmsUrl = cmsArray.optJSONObject(i).optString("api");
             String cmsName = cmsArray.optJSONObject(i).optString("name");
             String cmsSearchUrl = cmsUrl + "?quick=true&wd=" + key;
-            int index = i;
+            // 站点在 cmsArray 中的索引值, 本页 Http 请求的超时时间, 新创建变量是为了在lambda 表达式中使用
+            int index = i, cmsTimeout = timeout;
+
+
             executorService.execute(() -> {
                 try {
-                    JSONArray cmsResultArray = new JSONObject(OkHttp.string(cmsSearchUrl)).optJSONArray("list");
-                    list.addAll(parseVodListFromJSONArrayCmsResult(cmsResultArray, cmsName, index));
+                    JSONArray cmsResultArray = new JSONObject(OkHttp.string(cmsSearchUrl, cmsTimeout)).optJSONArray("list");
+                    list.addAll(parseVodListFromJSONArrayCmsResult(cmsResultArray, cmsName, index, cmsTimeout));
                 } catch (Exception e) {
+                    errorCmsSite.add(index);
                 }
             });
         }
@@ -662,7 +704,7 @@ public class Douban extends Spider {
         return Result.string(list);
     }
 
-    private List<Vod> parseVodListFromJSONArrayCmsResult(JSONArray items, String sourceName, int cmsOrder) throws Exception {
+    private List<Vod> parseVodListFromJSONArrayCmsResult(JSONArray items, String sourceName, int cmsOrder, int timeout) throws Exception {
         List<Vod> list = new ArrayList<>();
         StringBuilder idsBuilder = new StringBuilder();
         for (int i = 0; i < items.length(); i++) {
@@ -671,7 +713,7 @@ public class Douban extends Spider {
         }
 
         String detailSearchUrl = cmsArray.optJSONObject(cmsOrder).optString("api") + "?ac=detail&ids=" + Utils.substring(idsBuilder.toString(),1);
-        JSONArray detailItems = new JSONObject(OkHttp.string(detailSearchUrl)).optJSONArray("list");
+        JSONArray detailItems = new JSONObject(OkHttp.string(detailSearchUrl, timeout)).optJSONArray("list");
         for (int i = 0; i < detailItems.length(); i++) {
             JSONObject item = detailItems.optJSONObject(i);
             Vod vod = new Vod();
@@ -684,35 +726,39 @@ public class Douban extends Spider {
         return list;
     }
 
-    private List<Vod> parseVodListFromJSONArraySearch(JSONArray items) throws Exception {
+    private List<Vod> parseVodListFromJSONArraySearch(JSONArray items) {
         List<Vod> list = new ArrayList<>();
-        for (int i = 0; i < items.length(); i++) {
-            JSONObject item = items.optJSONObject(i);
-            JSONObject target = item.optJSONObject("target");
-            String emoji = "";
-            String vodType = item.optString("target_type");
-            String vodId = target.optString("id");
-            String name = target.optString("title");
-            String pic = target.optString("cover_url") + "@Referer=https://api.douban.com/@User-Agent=" + Util.CHROME;
-            if (name == null || name.isEmpty()) continue;//过滤广告
-            if (vodType.equals("chart")) {
-                emoji = "️📇";
-                String remark = emoji + "豆瓣片单" + target.optString("subtitle");
-                vodId = "chart/" + target.optString("id") + "/{link}";
-                pic = target.optString("cover_url") + "@Referer=https://api.douban.com/@User-Agent=" + Util.CHROME;
-                list.add(new Vod(vodId, name, pic, remark, true));//true表示是文件夹
-                continue;
+        try {
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject item = items.optJSONObject(i);
+                JSONObject target = item.optJSONObject("target");
+                String emoji = "";
+                String vodType = item.optString("target_type");
+                String vodId = target.optString("id");
+                String name = target.optString("title");
+                String pic = target.optString("cover_url") + "@Referer=https://api.douban.com/@User-Agent=" + Utils.CHROME;
+                if (name == null || name.isEmpty()) continue;//过滤广告
+                if (vodType.equals("chart")) {
+                    emoji = "️📇";
+                    String remark = emoji + "豆瓣片单" + target.optString("subtitle");
+                    vodId = "chart/" + target.optString("id") + "/{link}";
+                    pic = target.optString("cover_url") + "@Referer=https://api.douban.com/@User-Agent=" + Utils.CHROME;
+                    list.add(new Vod(vodId, name, pic, remark, true));//true表示是文件夹
+                    continue;
+                }
+                if (vodType.equals("movie")) {
+                    emoji = "🎬";
+                }
+                if (vodType.equals("tv")) {
+                    emoji = "📺";
+                }
+                String remark = emoji + getRating(target) + " " + getCard(target);
+                list.add(new Vod(vodId, name, pic, remark));
             }
-            if (vodType.equals("movie")) {
-                emoji = "🎬";
-            }
-            if (vodType.equals("tv")) {
-                emoji = "📺";
-            }
-            String remark = emoji + getRating(target) + " " + getCard(target);
-            list.add(new Vod(vodId, name, pic, remark));
+            return list;
+        } catch (Exception e) {
+            return list;
         }
-        return list;
     }
 
     @Override

@@ -280,84 +280,81 @@ public class Douban extends Spider {
         vod.setVodPlayFrom(vod.getVodPlayFrom() + "$$$解析");
         return vod;
     }
-
-    private Vod cmsHandler(Vod vod) {
+    
+    private Vod cmsHandler(Vod vod) throws Exception {
         return cmsHandler(vod, true);
     }
-    private Vod cmsHandler(Vod vod, boolean quick) {
-        try {
-            String vodName = vod.getVodName();
-            //JSONArray cmsArray = extend.optJSONArray("cms");
-            //Util.notify("cms");
-            StringBuilder playFromBuilder = new StringBuilder();
-            StringBuilder lastPlayFromBuilder = new StringBuilder();
-            StringBuilder playUrlBuilder = new StringBuilder();
-            AtomicInteger total = new AtomicInteger(cmsArray.length());
+    private Vod cmsHandler(Vod vod, boolean quick) throws Exception {
+        String vodName = vod.getVodName();
+        //JSONArray cmsArray = extend.optJSONArray("cms");
+        //Util.notify("cms");
+        StringBuilder playFromBuilder = new StringBuilder();
+        StringBuilder lastPlayFromBuilder = new StringBuilder();
+        StringBuilder playUrlBuilder = new StringBuilder();
+        AtomicInteger total = new AtomicInteger(cmsArray.length());
 
-            StringBuilder[] playFromBuilderArray = IntStream.range(0, total.get())
-                    .mapToObj(i -> new StringBuilder())
-                    .toArray(StringBuilder[]::new);
-            StringBuilder[] playUrlBuilderArray = IntStream.range(0, total.get())
-                    .mapToObj(i -> new StringBuilder())
-                    .toArray(StringBuilder[]::new);
+        StringBuilder[] playFromBuilderArray = IntStream.range(0, total.get())
+                .mapToObj(i -> new StringBuilder())
+                .toArray(StringBuilder[]::new);
+        StringBuilder[] playUrlBuilderArray = IntStream.range(0, total.get())
+                .mapToObj(i -> new StringBuilder())
+                .toArray(StringBuilder[]::new);
 
-            // Create a list of CompletableFuture for parallel HTTP requests
-            List<CompletableFuture<Void>> futures = IntStream.range(0, total.get())
-                    .mapToObj(i -> CompletableFuture.runAsync(() -> {
-                        try {
-                            String cmsUrl = cmsArray.optJSONObject(i).optString("api");
-                            String cmsSearchUrl = cmsUrl + "?wd=" + vodName + "&quick=" + Boolean.toString(quick);
-                            String cmsName = cmsArray.optJSONObject(i).optString("name");
+        // Create a list of CompletableFuture for parallel HTTP requests
+        List<CompletableFuture<Void>> futures = IntStream.range(0, total.get())
+                .mapToObj(i -> CompletableFuture.runAsync(() -> {
+                    try {
+                        String cmsUrl = cmsArray.optJSONObject(i).optString("api");
+                        String cmsSearchUrl = cmsUrl + "?wd=" + vodName + "&quick=" + Boolean.toString(quick);
+                        String cmsName = cmsArray.optJSONObject(i).optString("name");
 
-                            //获取名字完全一致的影片id
-                            String cmsVodId = "";
-                            JSONObject cmsQueryOb = new JSONObject(OkHttp.string(cmsSearchUrl));
-                            for (int j = 0; j < cmsQueryOb.optInt("total"); j++) {
-                                if (cmsQueryOb.optJSONArray("list").optJSONObject(j).optString("vod_name").equals(vodName)) {
-                                    cmsVodId = cmsQueryOb.optJSONArray("list").optJSONObject(j).optString("vod_id");
-                                    break;
-                                }
+                        // 获取名字完全一致的影片id, cmsVodId 不能设置为空, 否则代表全部项, &ids=xxx 不能删, 否则也会返回全部项, 需要把 ids 置为奇怪的值才会返回空 list
+                        String cmsVodId = "null";
+                        JSONObject cmsQueryOb = new JSONObject(OkHttp.string(cmsSearchUrl));
+                        for (int j = 0; j < cmsQueryOb.optInt("total"); j++) {
+                            if (cmsQueryOb.optJSONArray("list").optJSONObject(j).optString("vod_name").equals(vodName)) {
+                                cmsVodId = cmsQueryOb.optJSONArray("list").optJSONObject(j).optString("vod_id");
+                                break;
                             }
-
-                            String cmsItemUrl = cmsUrl + "?ac=detail&ids=" + cmsVodId;
-                            JSONObject cmsItemOb = new JSONObject(OkHttp.string(cmsItemUrl)).optJSONArray("list").optJSONObject(0);
-                            if (isCmsOrdered.equals("true")) {
-                                playFromBuilderArray[i].append(cmsName).append("$$$");
-                                playUrlBuilderArray[i].append(cmsItemOb.optString("vod_play_url")).append("$$$");
-                            } else {
-                                playFromBuilder.append(cmsName).append("$$$");
-                                playUrlBuilder.append(cmsItemOb.optString("vod_play_url")).append("$$$");
-                            }
-                        } catch (JSONException e) {
-                            e.printStackTrace();
                         }
-                    }))
-                    .collect(Collectors.toList());
 
-            CompletableFuture<Void> lastFuture = CompletableFuture.runAsync(() -> {
-                String searchUrl = "https://dmku.leftcuz.top:8443/searchplayurl?name=" + vod.getVodName();
-                lastPlayFromBuilder.append(OkHttp.string(searchUrl));
-            });
+                        String cmsItemUrl = cmsUrl + "?ac=detail&ids=" + cmsVodId;
+                        // 当 Http 请求返回空 list 时, optJSONObject 会报错, 在 catch 块中处理
+                        JSONObject cmsItemOb = new JSONObject(OkHttp.string(cmsItemUrl)).optJSONArray("list").optJSONObject(0);
+                        if (isCmsOrdered.equals("true")) {
+                            playFromBuilderArray[i].append(cmsName).append("$$$");
+                            playUrlBuilderArray[i].append(cmsItemOb.optString("vod_play_url")).append("$$$");
+                        } else {
+                            playFromBuilder.append(cmsName).append("$$$");
+                            playUrlBuilder.append(cmsItemOb.optString("vod_play_url")).append("$$$");
+                        }
+                    } catch (Exception e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }))
+                .collect(Collectors.toList());
 
-            futures.add(lastFuture);
-            // Wait for all requests to complete
-            CompletableFuture<Void> allOf = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
+        CompletableFuture<Void> lastFuture = CompletableFuture.runAsync(() -> {
+            String searchUrl = "https://dmku.leftcuz.top:8443/searchplayurl?name=" + vod.getVodName();
+            lastPlayFromBuilder.append(OkHttp.string(searchUrl));
+        });
 
-            // Wait for all requests to complete
-            allOf.join();
+        futures.add(lastFuture);
+        // Wait for all requests to complete
+        CompletableFuture<Void> allOf = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
 
-            if (isCmsOrdered.equals("ture")) {
-                for (int i = 0; i < total.get(); i++) {
-                    playFromBuilder.append(playFromBuilderArray[i].toString());
-                    playUrlBuilder.append(playUrlBuilderArray[i].toString());
-                }
+        // Wait for all requests to complete
+        allOf.join();
+
+        if (isCmsOrdered.equals("ture")) {
+            for (int i = 0; i < total.get(); i++) {
+                playFromBuilder.append(playFromBuilderArray[i].toString());
+                playUrlBuilder.append(playUrlBuilderArray[i].toString());
             }
-            vod.setVodPlayUrl(playUrlBuilder.toString() + lastPlayFromBuilder.toString());
-            vod.setVodPlayFrom(playFromBuilder.toString() + "解析");
-            return vod;
-        } catch (Exception e) {
-            return new Vod();
         }
+        vod.setVodPlayUrl(playUrlBuilder.toString() + lastPlayFromBuilder.toString());
+        vod.setVodPlayFrom(playFromBuilder.toString() + "解析");
+        return vod;
     }
 
     private String getRating(JSONObject item) {

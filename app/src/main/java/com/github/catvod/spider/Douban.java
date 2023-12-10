@@ -49,6 +49,8 @@ public class Douban extends Spider {
     private String myFilter;
     private JSONArray cmsArray;
     private List<Integer> errorCmsSite = new ArrayList<>();
+    private Vod detailVod;
+
 
     private Map<String, String> getHeader() {
         Map<String, String> header = new HashMap<>();
@@ -192,7 +194,7 @@ public class Douban extends Spider {
 
             String emoji = "";
             String vodType = getType(item);
-            String vodId = item.optString("id");
+            String vodId = item.optString("id") + "///" + item.optString("title") + "///{cmsMix}";
             String name = item.optString("title");
             String pic = getPic(item);
 
@@ -229,6 +231,9 @@ public class Douban extends Spider {
     @Override
     public String detailContent(List<String> ids) throws Exception {
         String id = ids.get(0);
+        String vodName = "";
+        detailVod = new Vod();
+
         if (id.endsWith("/{cmsSingle}")) {
             int cmsOrder = Integer.parseInt(id.split("/")[1]);
             String itemId = id.split("/")[0];
@@ -247,45 +252,87 @@ public class Douban extends Spider {
             vod.setVodPlayUrl(item.optString("vod_play_url"));
             currentVod = vod;
             return Result.string(vod);
+        } else if (id.endsWith("///{cmsMix}")) {
+            vodName = id.split("///")[1];
+            id = id.split("///")[0];
+            detailVod.setVodName(vodName);
+
+            ExecutorService executorService = Executors.newFixedThreadPool(2);
+
+            String finalId = id;
+            executorService.execute(() -> {
+                try {
+                    String idUrl = siteUrl + "/subject/" + finalId + apikey;
+                    JSONObject item = new JSONObject(OkHttp.string(idUrl, getHeader()));
+                    detailVod.setVodId(item.optString("id"));
+                    detailVod.setVodName(item.optString("title"));
+                    detailVod.setVodRemarks(item.optString("episodes_info") + " " + getJAS(item, "pubdate", " "));
+                    detailVod.setVodPic(item.optString("cover_url"));
+                    detailVod.setVodYear(item.optString("year"));
+                    detailVod.setVodArea(getJAS(item, "countries", " "));
+                    detailVod.setVodTag(item.optString("card_subtitle"));
+                    detailVod.setTypeName(getJAS(item, "genres", " "));
+                    detailVod.setVodDirector(getCelebsLink(item, "directors", " ", "celebs"));
+                    detailVod.setVodActor(getCelebsLink(item, "actors", " ", "celebs"));
+                    detailVod.setVodPlayFrom(getJAJ(item, "vendors", "title", "$$$"));
+                    detailVod.setVodPlayUrl(getJAJ(item, "vendors", "url", "$$$"));
+                    String itemType = item.optString("type");
+                    String desc = item.optString("url") + "\n" + getJASLink(item, "countries", " ", itemType + "_tag") + " " + getJASLink(item, "genres", " ", itemType + "_tag") + "\n" + item.optString("intro");
+                    detailVod.setVodContent(desc);
+                } catch (Exception e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+
+            executorService.execute(() -> {
+                try {
+                    cmsHandler();
+                } catch (Exception e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+
+            executorService.shutdown();
+
+            try {
+                // 等待所有线程完成
+                executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            currentVod = detailVod;
+            return Result.string(detailVod);
+        } else {
+            String idUrl = siteUrl + "/subject/" + id + apikey;
+            JSONObject item = new JSONObject(OkHttp.string(idUrl, getHeader()));
+            detailVod.setVodId(item.optString("id"));
+            detailVod.setVodName(item.optString("title"));
+            detailVod.setVodRemarks(item.optString("episodes_info") + " " + getJAS(item, "pubdate", " "));
+            detailVod.setVodPic(item.optString("cover_url"));
+            detailVod.setVodYear(item.optString("year"));
+            detailVod.setVodArea(getJAS(item, "countries", " "));
+            detailVod.setVodTag(item.optString("card_subtitle"));
+            detailVod.setTypeName(getJAS(item, "genres", " "));
+            detailVod.setVodDirector(getCelebsLink(item, "directors", " ", "celebs"));
+            detailVod.setVodActor(getCelebsLink(item, "actors", " ", "celebs"));
+            detailVod.setVodPlayFrom(getJAJ(item, "vendors", "title", "$$$"));
+            detailVod.setVodPlayUrl(getJAJ(item, "vendors", "url", "$$$"));
+            String itemType = item.optString("type");
+            String desc = item.optString("url") + "\n" + getJASLink(item, "countries", " ", itemType + "_tag") + " " + getJASLink(item, "genres", " ", itemType + "_tag") + "\n" + item.optString("intro");
+            detailVod.setVodContent(desc);
+
+            cmsHandler();
+            currentVod = detailVod;
+            return Result.string(detailVod);
         }
-
-        String idUrl = siteUrl + "/subject/" + id + apikey;
-        JSONObject item = new JSONObject(OkHttp.string(idUrl, getHeader()));
-
-        Vod vod = new Vod();
-        vod.setVodId(item.optString("id"));
-        vod.setVodName(item.optString("title"));
-        vod.setVodRemarks(item.optString("episodes_info") + " " + getJAS(item, "pubdate", " "));
-        vod.setVodPic(item.optString("cover_url"));
-        vod.setVodYear(item.optString("year"));
-        vod.setVodArea(getJAS(item, "countries", " "));
-        vod.setVodTag(item.optString("card_subtitle"));
-        vod.setTypeName(getJAS(item, "genres", " "));
-        vod.setVodDirector(getCelebsLink(item, "directors", " ", "celebs"));
-        vod.setVodActor(getCelebsLink(item, "actors", " ", "celebs"));
-        vod.setVodPlayFrom(getJAJ(item, "vendors", "title", "$$$"));
-        vod.setVodPlayUrl(getJAJ(item, "vendors", "url", "$$$"));
-        String itemType = item.optString("type");
-        String desc = item.optString("url") + "\n" + getJASLink(item, "countries", " ", itemType + "_tag") + " " + getJASLink(item, "genres", " ", itemType + "_tag") + "\n" + item.optString("intro");
-        vod.setVodContent(desc);
-        vod = cmsHandler(vod);
-        //vod = genParseUrl(vod);
-        currentVod = vod;
-        return Result.string(vod);
-    }
-
-    private Vod genParseUrl(Vod vod) throws Exception {
-        String searchUrl = "https://dmku.leftcuz.top:8443/searchplayurl?name=" + vod.getVodName();
-        vod.setVodPlayUrl(vod.getVodPlayUrl() + "$$$" + OkHttp.string(searchUrl));
-        vod.setVodPlayFrom(vod.getVodPlayFrom() + "$$$解析");
-        return vod;
     }
     
-    private Vod cmsHandler(Vod vod) throws Exception {
-        return cmsHandler(vod, true);
+    private void cmsHandler() throws Exception {
+        cmsHandler(true);
     }
-    private Vod cmsHandler(Vod vod, boolean quick) throws Exception {
-        String vodName = vod.getVodName();
+    private void cmsHandler(boolean quick) throws Exception {
+        String vodName = detailVod.getVodName();
         //JSONArray cmsArray = extend.optJSONArray("cms");
         //Util.notify("cms");
         StringBuilder playFromBuilder = new StringBuilder();
@@ -335,7 +382,7 @@ public class Douban extends Spider {
                 .collect(Collectors.toList());
 
         CompletableFuture<Void> lastFuture = CompletableFuture.runAsync(() -> {
-            String searchUrl = "https://dmku.leftcuz.top:8443/searchplayurl?name=" + vod.getVodName();
+            String searchUrl = "https://dmku.leftcuz.top:8443/searchplayurl?name=" + detailVod.getVodName();
             lastPlayFromBuilder.append(OkHttp.string(searchUrl));
         });
 
@@ -352,9 +399,8 @@ public class Douban extends Spider {
                 playUrlBuilder.append(playUrlBuilderArray[i].toString());
             }
         }
-        vod.setVodPlayUrl(playUrlBuilder.toString() + lastPlayFromBuilder.toString());
-        vod.setVodPlayFrom(playFromBuilder.toString() + "解析");
-        return vod;
+        detailVod.setVodPlayUrl(playUrlBuilder.toString() + lastPlayFromBuilder.toString());
+        detailVod.setVodPlayFrom(playFromBuilder.toString() + "解析");
     }
 
     private String getRating(JSONObject item) {
@@ -601,7 +647,7 @@ public class Douban extends Spider {
             JSONObject target = item.optJSONObject("work");
             String emoji = "";
             String vodType = target.optString("type");
-            String vodId = target.optString("id");
+            String vodId = target.optString("id") + "///" + target.optString("title") + "///{cmsMix}";
             String name = target.optString("title");
             String pic = getPic(target);
             if (name == null || name.isEmpty()) continue;//过滤广告
@@ -632,6 +678,7 @@ public class Douban extends Spider {
         // tagName 存储搜索关键词, 在分类页中调用展示更多搜索内容
         tagName = key;
 
+
         // 豆瓣条目搜索, 没有页数的限制, 但是一页只能显示五个项目
         // start 指每次翻页后请求豆瓣项目的开始位置, count 指一页展示的豆瓣条目数
         int start = (Integer.parseInt(pg) - 1) * count;
@@ -651,6 +698,8 @@ public class Douban extends Spider {
         List<Vod> list = initList;
         // 只有第一和第二页执行下面的逻辑, 获取 cms 采集站的搜索数据
         if (!pg.equals("1") && !pg.equals("2")) return Result.string(list);
+
+
 
         // 在第一页和第二页获取 cms 采集站的搜索数据
         // 第一页的超时时间设置为 5 秒, 第二页的超时时间为 10 秒 , 为 if-else 块初始化变量 timeout
@@ -709,7 +758,7 @@ public class Douban extends Spider {
             idsBuilder.append(item.optString("vod_id")).append(",");
         }
 
-        String detailSearchUrl = cmsArray.optJSONObject(cmsOrder).optString("api") + "?ac=detail&ids=" + Utils.substring(idsBuilder.toString(),1);
+        String detailSearchUrl = cmsArray.optJSONObject(cmsOrder).optString("api") + "?ac=detail&ids=" + (items.length() == 0 ? "null" : Utils.substring(idsBuilder.toString(),1));
         JSONArray detailItems = new JSONObject(OkHttp.string(detailSearchUrl, timeout)).optJSONArray("list");
         for (int i = 0; i < detailItems.length(); i++) {
             JSONObject item = detailItems.optJSONObject(i);
@@ -731,7 +780,7 @@ public class Douban extends Spider {
                 JSONObject target = item.optJSONObject("target");
                 String emoji = "";
                 String vodType = item.optString("target_type");
-                String vodId = target.optString("id");
+                String vodId = target.optString("id") + "///" + target.optString("title") + "///{cmsMix}";
                 String name = target.optString("title");
                 String pic = target.optString("cover_url") + "@Referer=https://api.douban.com/@User-Agent=" + Utils.CHROME;
                 if (name == null || name.isEmpty()) continue;//过滤广告

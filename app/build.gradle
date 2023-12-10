@@ -16,7 +16,7 @@ android {
 
     buildTypes {
         release {
-            // minifyEnabled true
+            minifyEnabled true
             proguardFiles 'proguard-rules.pro'
             proguardDictionaries {
                 dictionaryNames = ["build/class-dictionary", "build/package-dictionary", "build/obfuscation-dictionary"]

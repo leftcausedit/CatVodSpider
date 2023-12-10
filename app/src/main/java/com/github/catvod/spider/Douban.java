@@ -678,27 +678,35 @@ public class Douban extends Spider {
         // tagName 存储搜索关键词, 在分类页中调用展示更多搜索内容
         tagName = key;
 
+        // 多线程运行, 由于每个循环 (代表每个 cms 站点) 中的 Http 请求可以并行执行, 可以节省大量的时间
+        // 按照站点的数量初始化线程池, 加一个豆瓣
+        ExecutorService executorService = Executors.newFixedThreadPool(cmsArray.length() + 1);
 
         // 豆瓣条目搜索, 没有页数的限制, 但是一页只能显示五个项目
         // start 指每次翻页后请求豆瓣项目的开始位置, count 指一页展示的豆瓣条目数
         int start = (Integer.parseInt(pg) - 1) * count;
         // 为 try-catch 块声明 initList
-        List<Vod> initList;
+        List<Vod> list = new ArrayList<>();
         // 豆瓣搜索请求的 URL
         String searchUrl = siteUrl + "/search/subjects" + apikey + "&q=" + key + "&count=" + Integer.toString(count) + "&start=" + start;
-        // try-catch 块保证豆瓣请求出错时, 依然获取 cms 采集站的搜索数据
-        try {
-            // 获取豆瓣数据并解析获得 List<Vod>
-            JSONArray array = new JSONObject(OkHttp.string(searchUrl, getHeader())).optJSONArray("items");
-            initList = parseVodListFromJSONArraySearch(array);
-        } catch (Exception e) {
-            initList = new ArrayList<>();
-        }
-        // 为后面 lambda 表达式创建隐式 final 类型的 list
-        List<Vod> list = initList;
-        // 只有第一和第二页执行下面的逻辑, 获取 cms 采集站的搜索数据
-        if (!pg.equals("1") && !pg.equals("2")) return Result.string(list);
 
+        // 只有第一和第二页执行下面的逻辑, 获取 cms 采集站的搜索数据
+        if (!pg.equals("1") && !pg.equals("2")) {
+            JSONArray array = new JSONObject(OkHttp.string(searchUrl, getHeader())).optJSONArray("items");
+            list.addAll(parseVodListFromJSONArraySearch(array));
+            return Result.string(list);
+        }
+
+        executorService.execute(() -> {
+            // try-catch 块保证豆瓣请求出错时, 依然获取 cms 采集站的搜索数据
+            try {
+                // 获取豆瓣数据并解析获得 List<Vod>
+                JSONArray array = new JSONObject(OkHttp.string(searchUrl, getHeader())).optJSONArray("items");
+                list.addAll(parseVodListFromJSONArraySearch(array));
+            } catch (Exception e) {
+                Thread.currentThread().interrupt();
+            }
+        });
 
 
         // 在第一页和第二页获取 cms 采集站的搜索数据
@@ -710,9 +718,8 @@ public class Douban extends Spider {
             timeout = firstTimeout;
         } else timeout = secondTimeout;
 
-        // 多线程运行, 由于每个循环 (代表每个 cms 站点) 中的 Http 请求可以并行执行, 可以节省大量的时间
-        // 按照站点的数量初始化线程池
-        ExecutorService executorService = Executors.newFixedThreadPool(cmsArray.length());
+
+
 
         for (int i = 0; i < cmsArray.length(); i++) {
             // 在第二页判断, 如果在第一页中返回错误, 则继续执行逻辑; 否则该循环结束
@@ -721,16 +728,18 @@ public class Douban extends Spider {
                 continue;
             }
 
-            // cms 站点 URL, 名称, 搜索 URL
-            String cmsUrl = cmsArray.optJSONObject(i).optString("api");
-            String cmsName = cmsArray.optJSONObject(i).optString("name");
-            String cmsSearchUrl = cmsUrl + "?quick=true&wd=" + key;
+
             // 站点在 cmsArray 中的索引值, 本页 Http 请求的超时时间, 新创建变量是为了在lambda 表达式中使用
             int index = i, cmsTimeout = timeout;
 
 
             executorService.execute(() -> {
                 try {
+                    // cms 站点 URL, 名称, 搜索 URL
+                    String cmsUrl = cmsArray.optJSONObject(index).optString("api");
+                    String cmsName = cmsArray.optJSONObject(index).optString("name");
+                    String cmsSearchUrl = cmsUrl + "?quick=true&wd=" + key;
+
                     JSONArray cmsResultArray = new JSONObject(OkHttp.string(cmsSearchUrl, cmsTimeout)).optJSONArray("list");
                     list.addAll(parseVodListFromJSONArrayCmsResult(cmsResultArray, cmsName, index, cmsTimeout));
                 } catch (Exception e) {

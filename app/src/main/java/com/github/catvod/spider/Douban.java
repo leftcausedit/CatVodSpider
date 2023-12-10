@@ -31,6 +31,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 
 
@@ -225,7 +228,26 @@ public class Douban extends Spider {
     @Override
     public String detailContent(List<String> ids) throws Exception {
         String id = ids.get(0);
-        //if (Pattern.matches("[\\p{L}&&[^\\d],]+", id)) tagName = id;
+        if (id.endsWith("/{cmsSingle}")) {
+            int cmsOrder = Integer.parseInt(id.split("/")[1]);
+            String itemId = id.split("/")[0];
+            String cmsDetailUrl = cmsArray.optJSONObject(cmsOrder).optString("api") + "?ac=detail&ids=" + itemId;
+            JSONObject item  = new JSONObject(OkHttp.string(cmsDetailUrl)).optJSONArray("list").optJSONObject(0);
+            Vod vod = new Vod();
+            vod.setVodName(item.optString("vod_name"));
+            vod.setTypeName(item.optString("vod_class", ""));
+            vod.setVodDirector(item.optString("vod_director", ""));
+            vod.setVodActor(item.optString("vod_actor", ""));
+            vod.setVodId(itemId);
+            vod.setVodArea(item.optString("vod_area", ""));
+            vod.setVodRemarks("Update: " + item.optString("vod_time"));
+            vod.setVodContent(item.optString("vod_content", ""));
+            vod.setVodPlayFrom(item.optString("vod_play_from"));
+            vod.setVodPlayUrl(item.optString("vod_play_url"));
+            currentVod = vod;
+            return Result.string(vod);
+        }
+
         String idUrl = siteUrl + "/subject/" + id + apikey;
         JSONObject item = new JSONObject(OkHttp.string(idUrl, getHeader()));
 
@@ -610,13 +632,56 @@ public class Douban extends Spider {
 
     public String searchContent(String key, boolean quick, String pg, int count) throws Exception {
         tagName = key; //搜索分类页
-
         int start = (Integer.parseInt(pg) - 1) * count;
         String searchUrl = siteUrl + "/search/subjects" + apikey + "&q=" + key + "&count=" + Integer.toString(count) + "&start=" + start;
         JSONArray array = new JSONObject(OkHttp.string(searchUrl, getHeader())).optJSONArray("items");
         List<Vod> list = parseVodListFromJSONArraySearch(array);
+        ExecutorService executorService = Executors.newFixedThreadPool(cmsArray.length());
+        for (int i = 0; i < cmsArray.length(); i++) {
+            String cmsUrl = cmsArray.optJSONObject(i).optString("api");
+            String cmsName = cmsArray.optJSONObject(i).optString("name");
+            String cmsSearchUrl = cmsUrl + "?quick=true&wd=" + key;
+            int index = i;
+            executorService.execute(() -> {
+                try {
+                    JSONArray cmsResultArray = new JSONObject(OkHttp.string(cmsSearchUrl)).optJSONArray("list");
+                    list.addAll(parseVodListFromJSONArrayCmsResult(cmsResultArray, cmsName, index));
+                } catch (Exception e) {
+                }
+            });
+        }
+        executorService.shutdown();
+
+        try {
+            // 等待所有线程完成
+            executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 
         return Result.string(list);
+    }
+
+    private List<Vod> parseVodListFromJSONArrayCmsResult(JSONArray items, String sourceName, int cmsOrder) throws Exception {
+        List<Vod> list = new ArrayList<>();
+        StringBuilder idsBuilder = new StringBuilder();
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            idsBuilder.append(item.optString("vod_id")).append(",");
+        }
+
+        String detailSearchUrl = cmsArray.optJSONObject(cmsOrder).optString("api") + "?ac=detail&ids=" + Utils.substring(idsBuilder.toString(),1);
+        JSONArray detailItems = new JSONObject(OkHttp.string(detailSearchUrl)).optJSONArray("list");
+        for (int i = 0; i < detailItems.length(); i++) {
+            JSONObject item = detailItems.optJSONObject(i);
+            Vod vod = new Vod();
+            vod.setVodName(item.optString("vod_name"));
+            vod.setVodPic(item.optString("vod_pic"));
+            vod.setVodRemarks(sourceName + " " + item.optString("vod_year"));
+            vod.setVodId(item.optString("vod_id") + "/" + cmsOrder + "/{cmsSingle}");
+            list.add(vod);
+        }
+        return list;
     }
 
     private List<Vod> parseVodListFromJSONArraySearch(JSONArray items) throws Exception {

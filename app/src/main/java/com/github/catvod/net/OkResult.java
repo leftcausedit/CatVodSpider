@@ -35,4 +35,9 @@ public class OkResult {
     public Map<String, List<String>> getResp() {
         return resp;
     }
+
+    public boolean isError() {
+        // 根据你的需要定义超时的判定条件，例如 code == 500 或者其他条件
+        return this.code == 500; // 假设500表示超时
+    }
 }

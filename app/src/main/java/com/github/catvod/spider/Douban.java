@@ -81,14 +81,13 @@ public class Douban extends Spider {
         this.myFilter = extendOb.optJSONObject("filter").toString();
         this.cmsArray = extendOb.optJSONArray("cms");
         this.extend = extendOb;
-
     }
 
     @Override
     public String homeContent(boolean filter) throws Exception {
         List<Class> classes = new ArrayList<>();
-        List<String> typeIds = Arrays.asList("hot", "filter", "newlist", "search", "rank_list");
-        List<String> typeNames = Arrays.asList("热门", "筛选", "片单", "搜索", "榜单");
+        List<String> typeIds = Arrays.asList("hot", "movie_filter", "tv_filter", "newlist", "search", "rank_list");
+        List<String> typeNames = Arrays.asList("热门", "电影", "电视", "片单", "搜索", "榜单");
         for (int i = 0; i < typeIds.size(); i++) classes.add(new Class(typeIds.get(i), typeNames.get(i)));
         String recommendUrl = "http://api.douban.com/api/v2/subject_collection/subject_real_time_hotest/items" + apikey;
         JSONObject jsonObject = new JSONObject(OkHttp.string(recommendUrl, getHeader()));
@@ -99,15 +98,19 @@ public class Douban extends Spider {
     @Override
     public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
         String linkValue = "";
+        boolean isLink = false;
         if (tid.endsWith("/{link}")) {
             linkValue = tid.split("/")[1];
             tid = tid.split("/")[0];
+            isLink = true;
         }
         String sort = extend.get("sort") == null ? "U" : extend.get("sort");
+        boolean isSearchAsTag = extend.get("isSearchAsTag") != null && Boolean.parseBoolean(extend.get("isSearchAsTag"));
         String tags = URLEncoder.encode(getTags(extend));
         int start = (Integer.parseInt(pg) - 1) * 20;
         String cateUrl;
         String itemKey = "items";
+        boolean isCaseTv = false;
         int cookieFlag = 0;
         switch (tid) {
             case "chart":
@@ -149,25 +152,35 @@ public class Douban extends Spider {
                         break;
                 }
                 break;
+            case "tv_filter":
+                isCaseTv = true;
+            case "movie_filter":
             case "filter" :
             default:
-                String filterType = extend.get("tv_type") == null ? "movie" : (extend.get("movie_type") == null ? "tv" : "movie");
+                String filterType = isCaseTv ? "tv" : "movie";
+//                filterType = extend.get("tv_type") == null ? "movie" : (extend.get("movie_type") == null ? "tv" : "movie");
+                String finalTagName = "";
+                if (isSearchAsTag && !tagName.isEmpty()) finalTagName = tagName + ",";
+                if (isLink) {
+                    filterType = tid;
+                    finalTagName = linkValue;
+                }
                 switch (filterType) {
                     case "tv":
                         if (myCookie.isEmpty()) {
-                            cateUrl = siteUrl + "/tv/recommend" + apikey + "&sort=" + sort + "&tags=" + tagName + "," + tags + "&start=" + start + "&count=20";
+                            cateUrl = siteUrl + "/tv/recommend" + apikey + "&sort=" + sort + "&tags=" + finalTagName + tags + "&start=" + start + "&count=20";
                         } else {
                             cookieFlag = 1;
-                            cateUrl = siteUrlWithCookie + "/tv/recommend?refresh=0&start=" + start + "&count=20&selected_categories=%7B%7D&uncollect=false&sort=" + sort + "&tags=" + tagName + "," + tags + "&ck=Q5T8";
+                            cateUrl = siteUrlWithCookie + "/tv/recommend?refresh=0&start=" + start + "&count=20&selected_categories=%7B%7D&uncollect=false&sort=" + sort + "&tags=" + finalTagName + tags + "&ck=Q5T8";
                         }
                         break;
                     case "movie":
                     default:
                         if (myCookie.isEmpty()) {
-                            cateUrl = siteUrl + "/movie/recommend" + apikey + "&sort=" + sort + "&tags=" + tagName + "," + tags + "&start=" + start + "&count=20";
+                            cateUrl = siteUrl + "/movie/recommend" + apikey + "&sort=" + sort + "&tags=" + finalTagName + tags + "&start=" + start + "&count=20";
                         } else {
                             cookieFlag = 1;
-                            cateUrl = siteUrlWithCookie + "/movie/recommend?refresh=0&start=" + start + "&count=20&selected_categories=%7B%7D&uncollect=false&sort=" + sort + "&tags=" + tagName + "," + tags + "&ck=Q5T8";
+                            cateUrl = siteUrlWithCookie + "/movie/recommend?refresh=0&start=" + start + "&count=20&selected_categories=%7B%7D&uncollect=false&sort=" + sort + "&tags=" + finalTagName + tags + "&ck=Q5T8";
                         }
                         break;
                 }
@@ -274,9 +287,10 @@ public class Douban extends Spider {
                     detailVod.setTypeName(getJAS(item, "genres", " "));
                     detailVod.setVodDirector(getCelebsLink(item, "directors", " ", "celebs"));
                     detailVod.setVodActor(getCelebsLink(item, "actors", " ", "celebs"));
-                    detailVod.setVodPlayFrom(getJAJ(item, "vendors", "title", "$$$"));
-                    detailVod.setVodPlayUrl(getJAJ(item, "vendors", "url", "$$$"));
+//                    detailVod.setVodPlayFrom(getJAJ(item, "vendors", "title", "$$$"));
+//                    detailVod.setVodPlayUrl(getJAJ(item, "vendors", "url", "$$$"));
                     String itemType = item.optString("type");
+//                    String desc = "[a=hyperlink]" + item.optString("url") + "[/a]" + "\n" + getJASLink(item, "countries", " ", itemType + "_tag") + " " + getJASLink(item, "genres", " ", itemType + "_tag") + "\n" + item.optString("intro");
                     String desc = item.optString("url") + "\n" + getJASLink(item, "countries", " ", itemType + "_tag") + " " + getJASLink(item, "genres", " ", itemType + "_tag") + "\n" + item.optString("intro");
                     detailVod.setVodContent(desc);
                 } catch (Exception e) {
@@ -316,8 +330,8 @@ public class Douban extends Spider {
             detailVod.setTypeName(getJAS(item, "genres", " "));
             detailVod.setVodDirector(getCelebsLink(item, "directors", " ", "celebs"));
             detailVod.setVodActor(getCelebsLink(item, "actors", " ", "celebs"));
-            detailVod.setVodPlayFrom(getJAJ(item, "vendors", "title", "$$$"));
-            detailVod.setVodPlayUrl(getJAJ(item, "vendors", "url", "$$$"));
+//            detailVod.setVodPlayFrom(getJAJ(item, "vendors", "title", "$$$"));
+//            detailVod.setVodPlayUrl(getJAJ(item, "vendors", "url", "$$$"));
             String itemType = item.optString("type");
             String desc = item.optString("url") + "\n" + getJASLink(item, "countries", " ", itemType + "_tag") + " " + getJASLink(item, "genres", " ", itemType + "_tag") + "\n" + item.optString("intro");
             detailVod.setVodContent(desc);
@@ -548,7 +562,7 @@ public class Douban extends Spider {
     private String getTags(HashMap<String, String> extend) {
         try {
             StringBuilder tags = new StringBuilder();
-            for (String key : extend.keySet()) if (!key.equals("sort")) tags.append(extend.get(key)).append(",");
+            for (String key : extend.keySet()) if (!key.equals("sort") && !key.equals("isSearchAsTag")) tags.append(extend.get(key)).append(",");
             return Util.substring(tags.toString());
         } catch (Exception e) {
             return "";
@@ -710,8 +724,8 @@ public class Douban extends Spider {
 
 
         // 在第一页和第二页获取 cms 采集站的搜索数据
-        // 第一页的超时时间设置为 5 秒, 第二页的超时时间为 10 秒 , 为 if-else 块初始化变量 timeout
-        int firstTimeout = 5, secondTimeout = 10, timeout;
+        // 第一页的超时时间设置为 3 秒, 第二页的超时时间为 10 秒 , 为 if-else 块初始化变量 timeout
+        int firstTimeout = 3, secondTimeout = 10, timeout;
         // 第一页清除 cms 站报错记录, 因为第一页对所有站发起请求, 防止以前搜索的数据残留
         if (pg.equals("1")) {
             errorCmsSite.clear();
@@ -744,6 +758,7 @@ public class Douban extends Spider {
                     list.addAll(parseVodListFromJSONArrayCmsResult(cmsResultArray, cmsName, index, cmsTimeout));
                 } catch (Exception e) {
                     errorCmsSite.add(index);
+                    Thread.currentThread().interrupt();
                 }
             });
         }
@@ -752,10 +767,10 @@ public class Douban extends Spider {
         try {
             // 等待所有线程完成
             executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+//            executorService.awaitTermination(timeout, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-
         return Result.string(list);
     }
 
@@ -768,7 +783,15 @@ public class Douban extends Spider {
         }
 
         String detailSearchUrl = cmsArray.optJSONObject(cmsOrder).optString("api") + "?ac=detail&ids=" + (items.length() == 0 ? "null" : Utils.substring(idsBuilder.toString(),1));
-        JSONArray detailItems = new JSONObject(OkHttp.string(detailSearchUrl, timeout)).optJSONArray("list");
+        OkResult detailSearchResult = OkHttp.getResult(detailSearchUrl, timeout);
+        JSONArray detailItems;
+
+        if (detailSearchResult.isError()) {
+            Thread.currentThread().interrupt();
+            return list;
+        }
+        else detailItems = new JSONObject(detailSearchResult.getBody()).optJSONArray("list");
+
         for (int i = 0; i < detailItems.length(); i++) {
             JSONObject item = detailItems.optJSONObject(i);
             Vod vod = new Vod();

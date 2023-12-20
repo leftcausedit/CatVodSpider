@@ -270,7 +270,7 @@ public class Douban extends Spider {
             id = id.split("///")[0];
             detailVod.setVodName(vodName);
 
-            ExecutorService executorService = Executors.newFixedThreadPool(2);
+            ExecutorService executorService = Executors.newFixedThreadPool(2 + cmsArray.length());
 
             String finalId = id;
             executorService.execute(() -> {

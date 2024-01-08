@@ -153,7 +153,9 @@ public class Douban extends Spider {
                 }
                 break;
             case "tv_filter":
+            case "tv":
                 isCaseTv = true;
+            case "movie":
             case "movie_filter":
             case "filter" :
             default:
@@ -261,8 +263,10 @@ public class Douban extends Spider {
             vod.setVodArea(item.optString("vod_area", ""));
             vod.setVodRemarks("Update: " + item.optString("vod_time"));
             vod.setVodContent(item.optString("vod_content", ""));
+            vod.setVodYear(item.optString("vod_year"));
             vod.setVodPlayFrom(item.optString("vod_play_from"));
             vod.setVodPlayUrl(item.optString("vod_play_url"));
+//            vod.setVodMediaType(getCMSMediaType(item));
             currentVod = vod;
             return Result.string(vod);
         } else if (id.endsWith("///{cmsMix}")) {
@@ -290,6 +294,7 @@ public class Douban extends Spider {
 //                    detailVod.setVodPlayFrom(getJAJ(item, "vendors", "title", "$$$"));
 //                    detailVod.setVodPlayUrl(getJAJ(item, "vendors", "url", "$$$"));
                     String itemType = item.optString("type");
+                    detailVod.setVodMediaType(itemType);
 //                    String desc = "[a=hyperlink]" + item.optString("url") + "[/a]" + "\n" + getJASLink(item, "countries", " ", itemType + "_tag") + " " + getJASLink(item, "genres", " ", itemType + "_tag") + "\n" + item.optString("intro");
                     String desc = item.optString("url") + "\n" + getJASLink(item, "countries", " ", itemType + "_tag") + " " + getJASLink(item, "genres", " ", itemType + "_tag") + "\n" + item.optString("intro");
                     detailVod.setVodContent(desc);
@@ -341,7 +346,12 @@ public class Douban extends Spider {
             return Result.string(detailVod);
         }
     }
-    
+
+//    private String getCMSMediaType(JSONObject item) {
+//        int episodeCount = item.optInt("vod_total");
+//        return episodeCount > 1 ? "tv" : "movie";
+//    }
+
     private void cmsHandler() throws Exception {
         cmsHandler(true);
     }
@@ -392,7 +402,7 @@ public class Douban extends Spider {
                     } catch (Exception e) {
                         Thread.currentThread().interrupt();
                     }
-                }))
+                }).orTimeout(5, TimeUnit.SECONDS))
                 .collect(Collectors.toList());
 
         CompletableFuture<Void> lastFuture = CompletableFuture.runAsync(() -> {

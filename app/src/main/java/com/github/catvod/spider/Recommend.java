@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class Recommend extends Spider {
     private JSONObject extendOb;
@@ -35,123 +36,206 @@ public class Recommend extends Spider {
     private final String traktApiUrl = "https://api.trakt.tv";
     private final String tmdbApiUrl = "https://api.themoviedb.org/3";
     private final String tmdbImageUrl = "https://image.tmdb.org/t/p/original";
-    private final int TRAKT_RECOMMEND_ITEM_NUMBER = 10;
+    private final int TRAKT_ITEM_LIMIT_PER_PAGE = 10;
 
 
     @Override
     public void init(Context context, String extend) throws Exception {
-//        if (extend.startsWith("http")) extend = OkHttp.string(extend);
-//        JSONObject extendOb = new JSONObject(extend);
-//        this.extendOb = extendOb;
+        if (extend.startsWith("http")) extend = OkHttp.string(extend);
+        JSONObject extendOb = new JSONObject(extend);
+        this.extendOb = extendOb;
         this.traktAccessToken = Prefers.getString("trakt_access_token", "");
     }
     @Override
     public String homeContent(boolean filter) throws Exception {
         List<Class> classes = new ArrayList<>();
-        List<String> typeIds = Arrays.asList();
-        List<String> typeNames = Arrays.asList();
+        List<String> typeIds = Arrays.asList("hot", "list");
+        List<String> typeNames = Arrays.asList("热门", "片单");
         for (int i = 0; i < typeIds.size(); i++) classes.add(new Class(typeIds.get(i), typeNames.get(i)));
 
-        String traktRecommendMoviesUrl = traktApiUrl + "/recommendations/movies?ignore_collected=false&ignore_watchlisted=false";
-        String traktRecommendShowsUrl = traktApiUrl + "/recommendations/shows?ignore_collected=false&ignore_watchlisted=false";
-        JSONArray movieItems = new JSONArray(OkHttp.string(traktRecommendMoviesUrl, getTraktHeaders()));
-        JSONArray showItems = new JSONArray(OkHttp.string(traktRecommendShowsUrl, getTraktHeaders()));
-        List<Vod> movieList = parseTraktArray(movieItems, true);
-        List<Vod> showList = parseTraktArray(showItems,false);
+
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        AtomicReference<List<Vod>> movieListReference = new AtomicReference<>();
+        AtomicReference<List<Vod>> showListReference = new AtomicReference<>();
+        executor.execute(() -> {
+            try {
+                movieListReference.set(getTMDBVodList("/trending/movie/day", "1"));
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        });
+        executor.execute(() -> {
+            try {
+                showListReference.set(getTMDBVodList("/trending/tv/day", "1"));
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        });
+        executor.shutdown();
+        executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+
+        List<Vod> movieList = movieListReference.get();
+        List<Vod> showList = showListReference.get();
+
         List<Vod> list = new ArrayList<>();
-        for (int  i = 0; i < TRAKT_RECOMMEND_ITEM_NUMBER; i++) {
-            list.add(movieList.get(i));
-            list.add(showList.get(i));
+        int length = Math.max(movieList.size(), showList.size());
+        for (int  i = 0; i < length; i++) {
+            if (movieList.get(i) != null) list.add(movieList.get(i));
+            if (showList.get(i) != null) list.add(showList.get(i));
         }
-//        return Result.string(classes, list, filter ? extendOb : null);
-        return Result.string(classes, list);
+        return Result.string(classes, list, filter ? extendOb : null);
     }
-//
-//    @Override
-//    public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
-//        String sort = extend.get("sort") == null ? "T" : extend.get("sort");
-//        String tags = URLEncoder.encode(getTags(extend));
-//        int start = (Integer.parseInt(pg) - 1) * 20;
-//        String cateUrl;
-//        String itemKey = "items";
-//        switch (tid) {
-//            case "hot_gaia":
-//                sort = extend.get("sort") == null ? "recommend" : extend.get("sort");
-//                String area = extend.get("area") == null ? "全部" : extend.get("area");
-//                sort = sort + "&area=" + URLEncoder.encode(area);
-//                cateUrl = siteUrl + "/movie/hot_gaia" + apikey + "&sort=" + sort + "&start=" + start + "&count=20";
-//                break;
-//            case "tv_hot":
-//                String type = extend.get("type") == null ? "tv_hot" : extend.get("type");
-//                cateUrl = siteUrl + "/subject_collection/" + type + "/items" + apikey + "&start=" + start + "&count=20";
-//                itemKey = "subject_collection_items";
-//                break;
-//            case "show_hot":
-//                String showType = extend.get("type") == null ? "show_hot" : extend.get("type");
-//                cateUrl = siteUrl + "/subject_collection/" + showType + "/items" + apikey + "&start=" + start + "&count=20";
-//                itemKey = "subject_collection_items";
-//                break;
-//            case "tv":
-//                cateUrl = siteUrl + "/tv/recommend" + apikey + "&sort=" + sort + "&tags=" + tags + "&start=" + start + "&count=20";
-//                break;
-//            case "rank_list_movie":
-//                String rankMovieType = extend.get("榜单") == null ? "movie_real_time_hotest" : extend.get("榜单");
-//                cateUrl = siteUrl + "/subject_collection/" + rankMovieType + "/items" + apikey + "&start=" + start + "&count=20";
-//                itemKey = "subject_collection_items";
-//                break;
-//            case "rank_list_tv":
-//                String rankTVType = extend.get("榜单") == null ? "tv_real_time_hotest" : extend.get("榜单");
-//                cateUrl = siteUrl + "/subject_collection/" + rankTVType + "/items" + apikey + "&start=" + start + "&count=20";
-//                itemKey = "subject_collection_items";
-//                break;
-//            default:
-//                cateUrl = siteUrl + "/movie/recommend" + apikey + "&sort=" + sort + "&tags=" + tags + "&start=" + start + "&count=20";
-//                break;
-//        }
-//        JSONObject object = new JSONObject(OkHttp.string(cateUrl, getHeader()));
-//        JSONArray array = object.getJSONArray(itemKey);
-//        List<Vod> list = parseVodListFromJSONArray(array);
-//        int page = Integer.parseInt(pg), count = Integer.MAX_VALUE, limit = 20, total = Integer.MAX_VALUE;
-//        return Result.get().vod(list).page(page, count, limit, total).string();
-//    }
+
+        @Override
+    public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws JSONException, InterruptedException {
+        String folderId = tid.endsWith("/{traktFolder}") ? tid.split("/")[0] : "";
+        tid = tid.endsWith("/{traktFolder}") ? "traktFolder" : tid;
+        List<Vod> list = new ArrayList<>();
+        String url;
+        JSONArray items;
+        switch (tid) {
+            case "hot":
+                String site;
+                if (extend.get("tmdb") != null) site = "tmdb";
+                else if (extend.get("trakt") != null) site = "trakt";
+                else site = "tmdb";
+
+                switch (site) {
+                    case "tmdb":
+                        list = getTMDBVodList(getTMDBSitePath(extend), pg);
+                        break;
+                    case "trakt":
+                        int traktRecommendItemNumber = 2 * TRAKT_ITEM_LIMIT_PER_PAGE;
+                        switch (extend.get("trakt")) {
+                            case "movie":
+                                String traktRecommendMoviesUrl = traktApiUrl + "/recommendations/movies?ignore_collected=false&ignore_watchlisted=false&limit=" + traktRecommendItemNumber;
+                                JSONArray movieItems = new JSONArray(OkHttp.string(traktRecommendMoviesUrl, getTraktHeaders()));
+                                list = parseTraktArray(movieItems, true);
+                                break;
+                            case "show":
+                                String traktRecommendShowsUrl = traktApiUrl + "/recommendations/shows?ignore_collected=false&ignore_watchlisted=false&limit=" + traktRecommendItemNumber;
+                                JSONArray showItems = new JSONArray(OkHttp.string(traktRecommendShowsUrl, getTraktHeaders()));
+                                list = parseTraktArray(showItems,false);
+                                break;
+                            default:
+                                break;
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                break;
+            case "list":
+                // get lists from trakt
+                url = traktApiUrl + "/lists/trending?limit" + TRAKT_ITEM_LIMIT_PER_PAGE + "&page=" + pg;
+                items = new JSONArray(OkHttp.string(url, getTraktHeaders()));
+                list = parseTraktListArray(items);
+                break;
+            case "traktFolder":
+                url = traktApiUrl + "/lists/" + folderId + "/items/movie,show?limit=" + TRAKT_ITEM_LIMIT_PER_PAGE + "&page=" + pg;
+                items = new JSONArray(OkHttp.string(url, getTraktHeaders()));
+                list = parseTraktArray(items, true, true);
+                break;
+            default:
+                break;
+        }
+
+        int page = Integer.parseInt(pg), count = Integer.MAX_VALUE, limit = 20, total = Integer.MAX_VALUE;
+        return Result.get().vod(list).page(page, count, limit, total).string();
+    }
+
+    private List<Vod> getTMDBVodList(String path, String pg) throws JSONException {
+        String url = tmdbApiUrl + path + "?page=" + pg + "&language=zh-CN";
+        JSONArray items = new JSONObject(OkHttp.string(url, getTMDBHeaders())).optJSONArray("results");
+        List<Vod> list = parseItemArrayFromTMDB(items);
+        return list;
+    }
+
+    private String getTMDBSitePath(HashMap<String, String> extend) {
+        return extend.get("tmdb") == null ? "/trending/tv/week" : extend.get("tmdb");
+    }
+
+    // trakt lists
+    private List<Vod> parseTraktListArray(JSONArray items) {
+        List<Vod> list = new ArrayList<>();
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i).optJSONObject("list");
+            assert item != null;
+            list.add(parseTraktListItem(item));
+        }
+        return list;
+    }
+
+    private Vod parseTraktListItem(JSONObject item) {
+        Vod vod = new Vod();
+        vod.setVodName(item.optString("name"));
+        vod.setStyle(Vod.Style.list());
+        String id = item.optJSONObject("ids").optString("trakt");
+        vod.setVodId(id + "/{traktFolder}");
+        String itemCount = item.optString("item_count");
+        String likes = item.optString("likes");
+        vod.setVodRemarks(String.format("共%s项，%s人喜欢", itemCount, likes));
+        vod.setVodTag("folder");
+        return vod;
+    }
 
     private List<Vod> parseTraktArray(JSONArray items, boolean isMovie) throws InterruptedException {
+        return parseTraktArray(items, isMovie, false);
+    }
+    // trakt movies/shows
+    private List<Vod> parseTraktArray(JSONArray items, boolean isMovie, boolean isItemInChild) throws InterruptedException {
         List<Vod> list = new ArrayList<>();
+        Vod[] vodArray = new Vod[items.length()];
+
 
         ExecutorService executorService = Executors.newFixedThreadPool(items.length());
         for (int i = 0; i < items.length(); i++) {
             int finalI = i;
             executorService.execute(() -> {
                 JSONObject item = items.optJSONObject(finalI);
-                int tmdbid = item.optJSONObject("ids").optInt("tmdb");
-                Vod vod = null;
+                boolean finalIsMovie = isItemInChild ? (item.optString("type").equals("movie")) : isMovie;
+                item = isItemInChild ? item.optJSONObject(item.optString("type")) : item;
+                int tmdbId = item.optJSONObject("ids").optInt("tmdb");
                 try {
-                    vod = parseItemFromTMDB(getItemFromTMDB(tmdbid, isMovie), isMovie);
+                    vodArray[finalI] = parseItemFromTMDB(getItemFromTMDB(tmdbId, finalIsMovie), finalIsMovie);
                 } catch (JSONException e) {
                     e.printStackTrace();
+                    Thread.currentThread().interrupt();
                 }
-                list.add(vod);
             });
         }
         executorService.shutdown();
         executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
 
+        list = new ArrayList<>(Arrays.asList(vodArray));
         return list;
     }
 
-    private JSONObject getItemFromTMDB (int id, boolean isMovie) throws JSONException {
+    private JSONObject getItemFromTMDB(int id, boolean isMovie) throws JSONException {
         String typeUri = isMovie ? "/movie/" : "/tv/";
         String url = tmdbApiUrl + typeUri + id + "?language=zh-CN";
         return new JSONObject(OkHttp.string(url, getTMDBHeaders()));
     }
 
-    private Vod parseItemFromTMDB (JSONObject item, boolean isMovie) {
+    private List<Vod> parseItemArrayFromTMDB(JSONArray items) {
+        List<Vod> list = new ArrayList<>();
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            boolean isMovie = item.optString("media_type").equals("movie");
+            list.add(parseItemFromTMDB(item, isMovie));
+        }
+        return list;
+    }
+
+    private Vod parseItemFromTMDB(JSONObject item, boolean isMovie) {
         Vod vod = new Vod();
         String name = isMovie ? item.optString("title") : item.optString("name");
         vod.setVodName(name);
         vod.setVodRemarks(generateTMDBRemarks(item, isMovie));
         vod.setVodPic(tmdbImageUrl + item.optString("poster_path"));
         vod.setVodId(item.optString("id"));
+        vod.setVodTag("manga");
         return vod;
     }
 
@@ -164,13 +248,25 @@ public class Recommend extends Spider {
     }
 
     private String combineTMDBGenres (JSONObject item) {
-        JSONArray genres = item.optJSONArray("genres");
-        StringBuilder builder = new StringBuilder();
-        for (int i = 0; i < genres.length(); i++) {
-            String genre = genres.optJSONObject(i).optString("name");
-            builder.append(genre).append(" ");
+        try {
+            JSONArray genres = item.optJSONArray("genres");
+            StringBuilder builder = new StringBuilder();
+            for (int i = 0; i < genres.length(); i++) {
+                String genre = genres.optJSONObject(i).optString("name");
+                genre = genreTranslate(genre);
+                builder.append(genre).append(" ");
+            }
+            return Utils.substring(builder.toString());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "";
         }
-        return Utils.substring(builder.toString());
+    }
+    private String genreTranslate(String key) {
+        Map<String, String> dictionary = new HashMap<>();
+        dictionary.put("Sci-Fi & Fantasy", "科幻");
+
+        return dictionary.get(key) == null ? key : dictionary.get(key);
     }
     private Map<String, String> getTraktHeaders() {
         Map<String, String> headers = new HashMap<>();

@@ -1,5 +1,7 @@
 package com.github.catvod.bean;
 
+import android.text.TextUtils;
+
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 
@@ -11,6 +13,10 @@ public class Vod {
     private String vodId;
     @SerializedName("vod_name")
     private String vodName;
+    @SerializedName("vod_media_type")
+    private String vodMediaType;
+    @SerializedName("vod_tmdb_id")
+    private String vodTMDBId;
     @SerializedName("vod_pic")
     private String vodPic;
     @SerializedName("vod_remarks")
@@ -90,6 +96,23 @@ public class Vod {
     public String getVodName() {
         return vodName;
     }
+
+    public String getVodMediaType() {
+        return vodMediaType;
+    }
+
+    public void setVodMediaType(String vodMediaType) {
+        this.vodMediaType = vodMediaType;
+    }
+
+    public String getVodTMDBId() {
+        return vodTMDBId;
+    }
+
+    public void setVodTMDBId(String vodTMDBId) {
+        this.vodTMDBId = vodTMDBId;
+    }
+
 
     public void setVodPic(String vodPic) {
         this.vodPic = vodPic;

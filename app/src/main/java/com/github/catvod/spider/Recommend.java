@@ -12,7 +12,7 @@ import com.github.catvod.bean.Vod;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Prefers;
-import com.github.catvod.utils.Utils;
+import com.github.catvod.utils.Util;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -77,7 +77,7 @@ public class Recommend extends Spider {
 
         List<Vod> movieList = movieListReference.get();
         List<Vod> showList = showListReference.get();
-//        Utils.notify("80");
+//        Util.notify("80");
 
         List<Vod> list = new ArrayList<>();
         int length = Math.max(movieList.size(), showList.size());
@@ -93,7 +93,7 @@ public class Recommend extends Spider {
                 e.printStackTrace();
             }
         }
-//        Utils.notify("88");
+//        Util.notify("88");
         return Result.string(classes, list, filter ? extendOb : null);
     }
 
@@ -229,7 +229,7 @@ public class Recommend extends Spider {
 
     private List<Vod> parseItemArrayFromTMDB(JSONArray items) {
         List<Vod> list = new ArrayList<>();
-//        if (items == null) Utils.notify("234.2");
+//        if (items == null) Util.notify("234.2");
         try {
             for (int i = 0; i < items.length(); i++) {
                 JSONObject item = items.optJSONObject(i);
@@ -265,13 +265,13 @@ public class Recommend extends Spider {
         try {
             JSONArray genres = item.optJSONArray("genres");
             StringBuilder builder = new StringBuilder();
-//            if (genres == null) Utils.notify("270.combineTMDBGenres.isnull");
+//            if (genres == null) Util.notify("270.combineTMDBGenres.isnull");
             for (int i = 0; i < genres.length(); i++) {
                 String genre = genres.optJSONObject(i).optString("name");
                 genre = genreTranslate(genre);
                 builder.append(genre).append(" ");
             }
-            return Utils.substring(builder.toString());
+            return Util.substring(builder.toString());
         } catch (Exception e) {
             e.printStackTrace();
             return "";

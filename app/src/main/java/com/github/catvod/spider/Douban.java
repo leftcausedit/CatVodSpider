@@ -792,7 +792,7 @@ public class Douban extends Spider {
             idsBuilder.append(item.optString("vod_id")).append(",");
         }
 
-        String detailSearchUrl = cmsArray.optJSONObject(cmsOrder).optString("api") + "?ac=detail&ids=" + (items.length() == 0 ? "null" : Utils.substring(idsBuilder.toString(),1));
+        String detailSearchUrl = cmsArray.optJSONObject(cmsOrder).optString("api") + "?ac=detail&ids=" + (items.length() == 0 ? "null" : Util.substring(idsBuilder.toString(),1));
         OkResult detailSearchResult = OkHttp.getResult(detailSearchUrl, timeout);
         JSONArray detailItems;
 
@@ -824,13 +824,13 @@ public class Douban extends Spider {
                 String vodType = item.optString("target_type");
                 String vodId = target.optString("id") + "///" + target.optString("title") + "///{cmsMix}";
                 String name = target.optString("title");
-                String pic = target.optString("cover_url") + "@Referer=https://api.douban.com/@User-Agent=" + Utils.CHROME;
+                String pic = target.optString("cover_url") + "@Referer=https://api.douban.com/@User-Agent=" + Util.CHROME;
                 if (name == null || name.isEmpty()) continue;//过滤广告
                 if (vodType.equals("chart")) {
                     emoji = "️📇";
                     String remark = emoji + "豆瓣片单" + target.optString("subtitle");
                     vodId = "chart/" + target.optString("id") + "/{link}";
-                    pic = target.optString("cover_url") + "@Referer=https://api.douban.com/@User-Agent=" + Utils.CHROME;
+                    pic = target.optString("cover_url") + "@Referer=https://api.douban.com/@User-Agent=" + Util.CHROME;
                     list.add(new Vod(vodId, name, pic, remark, true));//true表示是文件夹
                     continue;
                 }

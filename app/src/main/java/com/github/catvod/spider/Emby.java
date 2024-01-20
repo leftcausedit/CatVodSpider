@@ -228,7 +228,7 @@ public class Emby extends Spider {
             JSONObject item = items.optJSONObject(0);
             String tempVodId =
                     firstVideoName + "$$" + firstVideoPic + "###" +
-                    Utils.substring(customVodUrlBuilder.toString(),1) +
+                    Util.substring(customVodUrlBuilder.toString(),1) +
                     "$$$" + item.optString("ParentId") +
                     "$$${customVod}";
             tempVodId = Base64.getEncoder().encodeToString(tempVodId.getBytes()) + "0123456789";
@@ -319,7 +319,7 @@ public class Emby extends Spider {
     public String detailContent(List<String> ids) throws Exception {
         String id = ids.get(0);
         if (id.endsWith("0123456789")) {
-            id = Utils.substring(id, 10);
+            id = Util.substring(id, 10);
             id = new String(Base64.getDecoder().decode(id));
             Vod vod = new Vod();
             vod.setVodName(id.split("###")[0].split("\\$\\$")[0]);

@@ -70,4 +70,8 @@ public abstract class Spider {
     public OkHttpClient client() {
         return OkHttp.client();
     }
+
+    public boolean enableTrakt() {
+        return true;
+    }
 }

@@ -296,7 +296,7 @@ public class Douban extends Spider {
                     String itemType = item.optString("type");
                     detailVod.setVodMediaType(itemType);
 //                    String desc = "[a=hyperlink]" + item.optString("url") + "[/a]" + "\n" + getJASLink(item, "countries", " ", itemType + "_tag") + " " + getJASLink(item, "genres", " ", itemType + "_tag") + "\n" + item.optString("intro");
-                    String desc = item.optString("url") + "\n" + getJASLink(item, "countries", " ", itemType + "_tag") + " " + getJASLink(item, "genres", " ", itemType + "_tag") + "\n" + item.optString("intro");
+                    String desc = item.optString("intro") + "\n\n" + "链接：[hyperlink=douban]" + item.optString("url") + "[/hyperlink]" + "\n" + "分类：" + getJASLink(item, "countries", " ", itemType + "_tag") + " " + getJASLink(item, "genres", " ", itemType + "_tag");
                     detailVod.setVodContent(desc);
                 } catch (Exception e) {
                     Thread.currentThread().interrupt();
@@ -338,7 +338,7 @@ public class Douban extends Spider {
 //            detailVod.setVodPlayFrom(getJAJ(item, "vendors", "title", "$$$"));
 //            detailVod.setVodPlayUrl(getJAJ(item, "vendors", "url", "$$$"));
             String itemType = item.optString("type");
-            String desc = item.optString("url") + "\n" + getJASLink(item, "countries", " ", itemType + "_tag") + " " + getJASLink(item, "genres", " ", itemType + "_tag") + "\n" + item.optString("intro");
+            String desc = item.optString("intro") + "\n\n" + "链接：[hyperlink=douban]" + item.optString("url") + "[/hyperlink]" + "\n" + "分类：" + getJASLink(item, "countries", " ", itemType + "_tag") + " " + getJASLink(item, "genres", " ", itemType + "_tag");
             detailVod.setVodContent(desc);
 
             cmsHandler();
@@ -863,7 +863,7 @@ public class Douban extends Spider {
         return Result.get().url(id).danmaku(Danmaku.getDanmaku(title, findEpisode(routeNames, routeValues, targetRouteName, targetUrl), extend)).string();
     }
 
-    private int findEpisode(String routeNames, String routeValues, String targetRouteName, String targetUrl) {
+    public static int findEpisode(String routeNames, String routeValues, String targetRouteName, String targetUrl) {
         String[] routeNamesArray = routeNames.split("\\$\\$\\$");
         int targetRouteIndex = Arrays.asList(routeNamesArray).indexOf(targetRouteName);
 

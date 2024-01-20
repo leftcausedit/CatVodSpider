@@ -35,7 +35,7 @@ public class Recommend extends Spider {
     private String traktAccessToken;
     private final String traktApiUrl = "https://api.trakt.tv";
     private final String tmdbApiUrl = "https://api.themoviedb.org/3";
-    private final String tmdbImageUrl = "https://image.tmdb.org/t/p/original";
+    private final String tmdbImageUrl = "https://image.tmdb.org/t/p/w500"; // smaller image size than original but still clear;
     private final int TRAKT_ITEM_LIMIT_PER_PAGE = 10;
 
 
@@ -77,13 +77,23 @@ public class Recommend extends Spider {
 
         List<Vod> movieList = movieListReference.get();
         List<Vod> showList = showListReference.get();
+//        Utils.notify("80");
 
         List<Vod> list = new ArrayList<>();
         int length = Math.max(movieList.size(), showList.size());
         for (int  i = 0; i < length; i++) {
-            if (movieList.get(i) != null) list.add(movieList.get(i));
-            if (showList.get(i) != null) list.add(showList.get(i));
+            try {
+                if (movieList.size() > i) list.add(movieList.get(i));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            try {
+                if (showList.size() > i) list.add(showList.get(i));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
+//        Utils.notify("88");
         return Result.string(classes, list, filter ? extendOb : null);
     }
 
@@ -188,7 +198,6 @@ public class Recommend extends Spider {
         List<Vod> list = new ArrayList<>();
         Vod[] vodArray = new Vod[items.length()];
 
-
         ExecutorService executorService = Executors.newFixedThreadPool(items.length());
         for (int i = 0; i < items.length(); i++) {
             int finalI = i;
@@ -220,10 +229,15 @@ public class Recommend extends Spider {
 
     private List<Vod> parseItemArrayFromTMDB(JSONArray items) {
         List<Vod> list = new ArrayList<>();
-        for (int i = 0; i < items.length(); i++) {
-            JSONObject item = items.optJSONObject(i);
-            boolean isMovie = item.optString("media_type").equals("movie");
-            list.add(parseItemFromTMDB(item, isMovie));
+//        if (items == null) Utils.notify("234.2");
+        try {
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject item = items.optJSONObject(i);
+                boolean isMovie = item.optString("media_type").equals("movie");
+                list.add(parseItemFromTMDB(item, isMovie));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
         return list;
     }
@@ -235,7 +249,7 @@ public class Recommend extends Spider {
         vod.setVodRemarks(generateTMDBRemarks(item, isMovie));
         vod.setVodPic(tmdbImageUrl + item.optString("poster_path"));
         vod.setVodId(item.optString("id"));
-        vod.setVodTag("manga");
+        vod.setVodTag("detail");
         return vod;
     }
 
@@ -251,6 +265,7 @@ public class Recommend extends Spider {
         try {
             JSONArray genres = item.optJSONArray("genres");
             StringBuilder builder = new StringBuilder();
+//            if (genres == null) Utils.notify("270.combineTMDBGenres.isnull");
             for (int i = 0; i < genres.length(); i++) {
                 String genre = genres.optJSONObject(i).optString("name");
                 genre = genreTranslate(genre);

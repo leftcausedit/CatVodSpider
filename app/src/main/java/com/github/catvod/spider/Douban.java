@@ -711,21 +711,22 @@ public class Douban extends Spider {
         int start = (Integer.parseInt(pg) - 1) * count;
         // 为 try-catch 块声明 initList
         List<Vod> list = new ArrayList<>();
-        // 豆瓣搜索请求的 URL
-        String searchUrl = siteUrl + "/search/subjects" + apikey + "&q=" + key + "&count=" + Integer.toString(count) + "&start=" + start;
+        // 豆瓣搜索请求的 URL 2 种
+//        String searchUrl = siteUrl + "/search/subjects" + apikey + "&q=" + key + "&count=" + Integer.toString(count) + "&start=" + start;
+        String searchUrl = siteUrlWithCookie + "/search/subjects" + "?q=" + key + "&count=" + count + "&start=" + start;
 
-        // 只有第一和第二页执行下面的逻辑, 获取 cms 采集站的搜索数据
         if (!pg.equals("1") && !pg.equals("2")) {
-            JSONArray array = new JSONObject(OkHttp.string(searchUrl, getHeader())).optJSONArray("items");
+            JSONArray array = new JSONObject(OkHttp.string(searchUrl, getHeader())).optJSONObject("subjects").optJSONArray("items");
             list.addAll(parseVodListFromJSONArraySearch(array));
             return Result.string(list);
         }
 
+        // 只有第一和第二页执行下面的逻辑, 获取 cms 采集站的搜索数据，即第一第二页只有豆瓣数据
         executorService.execute(() -> {
             // try-catch 块保证豆瓣请求出错时, 依然获取 cms 采集站的搜索数据
             try {
                 // 获取豆瓣数据并解析获得 List<Vod>
-                JSONArray array = new JSONObject(OkHttp.string(searchUrl, getHeader())).optJSONArray("items");
+                JSONArray array = new JSONObject(OkHttp.string(searchUrl, getHeaderWithCookie())).optJSONObject("subjects").optJSONArray("items");
                 list.addAll(parseVodListFromJSONArraySearch(array));
             } catch (Exception e) {
                 Thread.currentThread().interrupt();
@@ -825,10 +826,10 @@ public class Douban extends Spider {
                 String vodId = target.optString("id") + "///" + target.optString("title") + "///{cmsMix}";
                 String name = target.optString("title");
                 String pic = target.optString("cover_url") + "@Referer=https://api.douban.com/@User-Agent=" + Util.CHROME;
-                if (name == null || name.isEmpty()) continue;//过滤广告
+                if (name.isEmpty()) continue;//过滤广告
                 if (vodType.equals("chart")) {
                     emoji = "️📇";
-                    String remark = emoji + "豆瓣片单" + target.optString("subtitle");
+                    String remark = emoji + "豆瓣片单" + target.optString("card_subtitle");
                     vodId = "chart/" + target.optString("id") + "/{link}";
                     pic = target.optString("cover_url") + "@Referer=https://api.douban.com/@User-Agent=" + Util.CHROME;
                     list.add(new Vod(vodId, name, pic, remark, true));//true表示是文件夹

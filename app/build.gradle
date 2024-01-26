@@ -23,6 +23,11 @@ android {
                 maxLineLength 3
                 linesCountInDictionary 100000
             }
+            signingConfig signingConfigs.debug
+        }
+        debug {
+            debuggable true
+            signingConfig signingConfigs.debug
         }
     }
 

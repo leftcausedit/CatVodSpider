@@ -42,7 +42,7 @@ public class Emby extends Spider {
     private String defaultParentId;
     private Vod danmuVod; // detailContent
     public boolean enableTrakt;
-    private String imageUri = "/Images/Primary?maxHeight=500&maxWidth=500&quality=90";
+    private String imageUri = "/Images/Primary?maxHeight=500&maxWidth=500&quality=90&format=webp"; //decrease the image size
 
     @Override
     public void init(Context context, String extend) throws Exception{

@@ -11,8 +11,18 @@ import com.github.catvod.bean.Result;
 import com.github.catvod.bean.Vod;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.net.OkHttp;
+import com.github.catvod.utils.NumberUtil;
 import com.github.catvod.utils.Prefers;
 import com.github.catvod.utils.Util;
+import com.uwetrottmann.tmdb2.DiscoverMovieBuilder;
+import com.uwetrottmann.tmdb2.DiscoverTvBuilder;
+import com.uwetrottmann.tmdb2.Tmdb;
+import com.uwetrottmann.tmdb2.entities.BaseMovie;
+import com.uwetrottmann.tmdb2.entities.BaseTvShow;
+import com.uwetrottmann.tmdb2.entities.DiscoverFilter;
+import com.uwetrottmann.tmdb2.entities.MovieResultsPage;
+import com.uwetrottmann.tmdb2.entities.TvShowResultsPage;
+import com.uwetrottmann.tmdb2.enumerations.SortBy;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -29,6 +39,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import retrofit2.Response;
+
 public class Recommend extends Spider {
     private JSONObject extendOb;
     private final String traktClientId = "8111469842a563dd678e4210ff597eb9265f7e7ed6357eef22fe3373b4a71ac9";
@@ -37,7 +49,7 @@ public class Recommend extends Spider {
     private final String tmdbApiUrl = "https://api.themoviedb.org/3";
     private final String tmdbImageUrl = "https://image.tmdb.org/t/p/w500"; // smaller image size than original but still clear;
     private final int TRAKT_ITEM_LIMIT_PER_PAGE = 10;
-
+    private final Tmdb tmdb = new Tmdb("e657e67e577ad19b3e4496a39be11d05");
 
     @Override
     public void init(Context context, String extend) throws Exception {
@@ -49,8 +61,8 @@ public class Recommend extends Spider {
     @Override
     public String homeContent(boolean filter) throws Exception {
         List<Class> classes = new ArrayList<>();
-        List<String> typeIds = Arrays.asList("hot", "list");
-        List<String> typeNames = Arrays.asList("热门", "片单");
+        List<String> typeIds = Arrays.asList("hot", "list", "discovery");
+        List<String> typeNames = Arrays.asList("热门", "片单", "探索");
         for (int i = 0; i < typeIds.size(); i++) classes.add(new Class(typeIds.get(i), typeNames.get(i)));
 
 
@@ -97,14 +109,45 @@ public class Recommend extends Spider {
         return Result.string(classes, list, filter ? extendOb : null);
     }
 
-        @Override
-    public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws JSONException, InterruptedException {
+    @Override
+    public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
         String folderId = tid.endsWith("/{traktFolder}") ? tid.split("/")[0] : "";
         tid = tid.endsWith("/{traktFolder}") ? "traktFolder" : tid;
         List<Vod> list = new ArrayList<>();
         String url;
         JSONArray items;
         switch (tid) {
+            case "discovery":
+                int tempNumber;
+                if (extend.get("type") == null || extend.get("type").equals("movie")) {
+                    DiscoverMovieBuilder discoverMovieBuilder = tmdb.discoverMovie()
+                            .language("zh-CN")
+                            .page(Integer.parseInt(pg))
+                            .sort_by(SortBy.valueOf(extend.get("sort") == null ? "POPULARITY_DESC" : extend.get("sort")));
+                    if (extend.get("genre_movie") != null && (tempNumber = NumberUtil.parseIntWithDefault(extend.get("genre_movie"))) != -1) discoverMovieBuilder = discoverMovieBuilder.with_genres(new DiscoverFilter(tempNumber));
+                    if (extend.get("keyword") != null && (tempNumber = NumberUtil.parseIntWithDefault(extend.get("keyword"))) != -1) discoverMovieBuilder = discoverMovieBuilder.with_keywords(new DiscoverFilter(tempNumber));
+
+                    Response<MovieResultsPage> response = discoverMovieBuilder.build().execute();
+                    if (response.isSuccessful()) {
+                        List<BaseMovie> baseMovies = response.body().results;
+                        list = BaseMoviesToVods(baseMovies);
+                    }
+                } else if (extend.get("type").equals("tv")) {
+                    DiscoverTvBuilder discoverTvBuilder = tmdb.discoverTv()
+                            .language("zh-CN")
+                            .page(Integer.parseInt(pg))
+                            .sort_by(SortBy.valueOf(extend.get("sort") == null ? "POPULARITY_DESC" : extend.get("sort")));
+                    if (extend.get("genre_tv") != null && (tempNumber = NumberUtil.parseIntWithDefault(extend.get("genre_tv"))) != -1) discoverTvBuilder = discoverTvBuilder.with_genres(new DiscoverFilter(tempNumber));
+                    if (extend.get("keyword") != null && (tempNumber = NumberUtil.parseIntWithDefault(extend.get("keyword"))) != -1) discoverTvBuilder = discoverTvBuilder.with_keywords(new DiscoverFilter(tempNumber));
+
+                    Response<TvShowResultsPage> response = discoverTvBuilder.build().execute();
+                    if (response.isSuccessful()) {
+                        List<BaseTvShow> baseTvShows = response.body().results;
+                        list = BaseTvShowsToVods(baseTvShows);
+                    }
+                }
+
+                break;
             case "hot":
                 String site;
                 if (extend.get("tmdb") != null) site = "tmdb";
@@ -153,6 +196,36 @@ public class Recommend extends Spider {
 
         int page = Integer.parseInt(pg), count = Integer.MAX_VALUE, limit = 20, total = Integer.MAX_VALUE;
         return Result.get().vod(list).page(page, count, limit, total).string();
+    }
+
+    private List<Vod> BaseTvShowsToVods(List<BaseTvShow> baseTvShows) {
+        List<Vod> list = new ArrayList<>();
+        for (BaseTvShow baseTvShow : baseTvShows) {
+            Vod vod = new Vod();
+            vod.setVodName(baseTvShow.name);
+            vod.setVodPic(tmdbImageUrl + baseTvShow.poster_path);
+            vod.setVodRemarks(String.format(Locale.CHINA, "\uD83C\uDFAC%.0f(%d) \uD83D\uDD25%.0f", baseTvShow.vote_average, baseTvShow.vote_count, baseTvShow.popularity));
+            vod.setVodId(String.valueOf(baseTvShow.id));
+            vod.setVodContent(baseTvShow.overview);
+            vod.setVodTag("detail");
+            list.add(vod);
+        }
+        return list;
+    }
+
+    private List<Vod> BaseMoviesToVods(List<BaseMovie> baseMovies) {
+        List<Vod> list = new ArrayList<>();
+        for (BaseMovie baseMovie : baseMovies) {
+            Vod vod = new Vod();
+            vod.setVodName(baseMovie.title);
+            vod.setVodPic(tmdbImageUrl + baseMovie.poster_path);
+            vod.setVodRemarks(String.format(Locale.CHINA, "\uD83C\uDFAC%.0f(%d) \uD83D\uDD25%.0f", baseMovie.vote_average, baseMovie.vote_count, baseMovie.popularity));
+            vod.setVodId(String.valueOf(baseMovie.id));
+            vod.setVodContent(baseMovie.overview);
+            vod.setVodTag("detail");
+            list.add(vod);
+        }
+        return list;
     }
 
     private List<Vod> getTMDBVodList(String path, String pg) throws JSONException {

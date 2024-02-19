@@ -323,6 +323,7 @@ public class Recommend extends Spider {
         vod.setVodPic(tmdbImageUrl + item.optString("poster_path"));
         vod.setVodId(item.optString("id"));
         vod.setVodTag("detail");
+        vod.setVodContent(item.optString("overview"));
         return vod;
     }
 

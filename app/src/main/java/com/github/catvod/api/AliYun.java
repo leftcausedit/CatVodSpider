@@ -34,6 +34,7 @@ import com.github.catvod.net.OkHttp;
 import com.github.catvod.net.OkResult;
 import com.github.catvod.spider.Init;
 import com.github.catvod.spider.Proxy;
+import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Notify;
 import com.github.catvod.utils.Path;
 import com.github.catvod.utils.ProxyVideo;
@@ -41,7 +42,6 @@ import com.github.catvod.utils.QRCode;
 import com.github.catvod.utils.ResUtil;
 import com.github.catvod.utils.Util;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -106,6 +106,13 @@ public class AliYun {
         return headers;
     }
 
+    private HashMap<String, String> getHeaders() {
+        HashMap<String, String> headers = getHeader();
+        headers.put("x-share-token", share.getShareToken());
+        headers.put("X-Canary", "client=Android,app=adrive,version=v4.3.1");
+        return headers;
+    }
+
     private HashMap<String, String> getHeaderAuth() {
         HashMap<String, String> headers = getHeader();
         headers.put("x-share-token", share.getShareToken());
@@ -138,7 +145,7 @@ public class AliYun {
 
     private String auth(String url, String json, boolean retry) {
         url = url.startsWith("https") ? url : "https://api.aliyundrive.com/" + url;
-        OkResult result = OkHttp.post(url, json, getHeaderAuth());
+        OkResult result = OkHttp.post(url, json, url.contains("file/list") ? getHeaders() : getHeaderAuth());
         SpiderDebug.log(result.getCode() + "," + url + "," + result.getBody());
         if (retry && result.getCode() == 401 && refreshAccessToken()) return auth(url, json, false);
         if (retry && result.getCode() == 429) return auth(url, json, false);
@@ -336,7 +343,7 @@ public class AliYun {
             param.addProperty("share_id", shareId);
             param.addProperty("expire_sec", 600);
             String json = auth("v2/file/get_share_link_download_url", param.toString(), false);
-            String url = JsonParser.parseString(json).getAsJsonObject().get("download_url").getAsString();
+            String url = Json.parse(json).getAsJsonObject().get("download_url").getAsString();
             shareDownloadMap.put(fileId, url);
             return url;
         } catch (Exception e) {
@@ -449,11 +456,7 @@ public class AliYun {
     }
 
     private String proxyVideoUrl(String cate, String shareId, String fileId) {
-        int thread = 1;
-        String url = String.format(Proxy.getUrl() + "?do=ali&type=video&cate=%s&shareId=%s&fileId=%s", cate, shareId, fileId);
-        if ("open".equals(cate)) thread = 10;
-        if ("share".equals(cate)) thread = 10;
-        return thread == 1 ? url : ProxyVideo.url(url, thread);
+        return String.format(Proxy.getUrl() + "?do=ali&type=video&cate=%s&shareId=%s&fileId=%s", cate, shareId, fileId);
     }
 
     private String proxyVideoUrl(String cate, String shareId, String fileId, String templateId) {
@@ -477,7 +480,6 @@ public class AliYun {
     public Object[] proxyVideo(Map<String, String> params) throws Exception {
         if (dialog != null && dialog.isShowing()) return null;
         String templateId = params.get("templateId");
-        String response = params.get("response");
         String shareId = params.get("shareId");
         String mediaId = params.get("mediaId");
         String fileId = params.get("fileId");
@@ -485,7 +487,7 @@ public class AliYun {
         String downloadUrl = "";
 
         if ("preview".equals(cate)) {
-            return previewProxy(shareId, fileId, templateId);
+            return new Object[]{200, "application/vnd.apple.mpegurl", new ByteArrayInputStream(getM3u8(shareId, fileId, templateId).getBytes())};
         }
 
         if ("open".equals(cate)) {
@@ -503,24 +505,14 @@ public class AliYun {
             downloadUrl = mediaUrl;
         }
 
-        if ("url".equals(response)) return new Object[]{200, "text/plain; charset=utf-8", new ByteArrayInputStream(downloadUrl.getBytes("UTF-8"))};
         Map<String, String> headers = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-        for (String key : params.keySet()) headers.put(key, params.get(key));
-        headers.remove("do");
-        headers.remove("host");
-        headers.remove("type");
-        headers.remove("cate");
-        headers.remove("fileId");
-        headers.remove("shareId");
-        headers.remove("mediaId");
-        headers.remove("templateId");
-        headers.remove("remote-addr");
-        headers.remove("http-client-ip");
-        return new Object[]{ProxyVideo.proxy(downloadUrl, headers)};
-    }
+        for (String key : params.keySet()) {
+            if (key.equals("referer") || key.equals("icy-metadata") || key.equals("range") || key.equals("connection") || key.equals("accept-encoding") || key.equals("user-agent")) {
+                headers.put(key, params.get(key));
+            }
+        }
 
-    private Object[] previewProxy(String shareId, String fileId, String templateId) {
-        return new Object[]{200, "application/vnd.apple.mpegurl", new ByteArrayInputStream(getM3u8(shareId, fileId, templateId).getBytes())};
+        return new Object[]{ProxyVideo.proxy(downloadUrl, headers)};
     }
 
     private String getM3u8Url(String shareId, String fileId, String templateId) {

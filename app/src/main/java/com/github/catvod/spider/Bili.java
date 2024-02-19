@@ -13,13 +13,14 @@ import com.github.catvod.bean.bili.Data;
 import com.github.catvod.bean.bili.Media;
 import com.github.catvod.bean.bili.Page;
 import com.github.catvod.bean.bili.Resp;
+import com.github.catvod.bean.bili.Wbi;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.net.OkHttp;
+import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Path;
 import com.github.catvod.utils.Util;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -47,6 +48,7 @@ public class Bili extends Spider {
     private JsonObject extend;
     private boolean login;
     private boolean isVip;
+    private Wbi wbi;
 
     private static Map<String, String> getHeader() {
         Map<String, String> headers = new HashMap<>();
@@ -83,7 +85,7 @@ public class Bili extends Spider {
 
     @Override
     public void init(Context context, String extend) throws Exception {
-        this.extend = JsonParser.parseString(extend).getAsJsonObject();
+        this.extend = Json.safeObject(extend);
         setCookie();
         setAudio();
     }
@@ -114,9 +116,11 @@ public class Bili extends Spider {
     @Override
     public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
         if (tid.endsWith("/{pg}")) {
-            String mid = tid.split("/")[0];
+            LinkedHashMap<String, Object> params = new LinkedHashMap<>();
+            params.put("mid", tid.split("/")[0]);
+            params.put("pn", pg);
             List<Vod> list = new ArrayList<>();
-            String json = OkHttp.string("https://api.bilibili.com/x/space/wbi/arc/search?mid=" + mid + "&pn=" + pg, getHeader());
+            String json = OkHttp.string("https://api.bilibili.com/x/space/wbi/arc/search?" + wbi.getQuery(params), getHeader());
             for (Resp.Result item : Resp.Result.arrayFrom(Resp.objectFrom(json).getData().getList().getAsJsonObject().get("vlist"))) list.add(item.getVod());
             return Result.string(list);
         } else {
@@ -173,7 +177,7 @@ public class Bili extends Spider {
         episode = new ArrayList<>();
         api = "https://api.bilibili.com/x/web-interface/archive/related?bvid=" + bvid;
         json = OkHttp.string(api, getHeader());
-        JsonArray array = JsonParser.parseString(json).getAsJsonObject().getAsJsonArray("data");
+        JsonArray array = Json.parse(json).getAsJsonObject().getAsJsonArray("data");
         for (int i = 0; i < array.size(); i++) {
             JsonObject object = array.get(i).getAsJsonObject();
             episode.add(object.get("title").getAsString() + "$" + object.get("aid").getAsInt() + "+" + object.get("cid").getAsInt() + "+" + TextUtils.join(":", acceptQuality) + "+" + TextUtils.join(":", acceptDesc));
@@ -275,6 +279,7 @@ public class Bili extends Spider {
         Data data = Resp.objectFrom(json).getData();
         login = data.isLogin();
         isVip = data.isVip();
+        wbi = data.getWbi();
         //getQRCode();
     }
 

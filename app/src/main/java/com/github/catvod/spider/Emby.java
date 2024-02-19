@@ -3,6 +3,7 @@ package com.github.catvod.spider;
 import android.content.Context;
 
 import com.github.catvod.bean.Result;
+import com.github.catvod.bean.Sub;
 import com.github.catvod.bean.Vod;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.net.OkHttp;
@@ -43,6 +44,7 @@ public class Emby extends Spider {
     private Vod danmuVod; // detailContent
     public boolean enableTrakt;
     private String imageUri = "/Images/Primary?maxHeight=500&maxWidth=500&quality=90&format=webp"; //decrease the image size
+    private JSONObject currentEpisodesJSONObject;
 
     @Override
     public void init(Context context, String extend) throws Exception{
@@ -366,7 +368,9 @@ public class Emby extends Spider {
             vod.setVodRemarks(item.optString("CommunityRating"));
 
             String episodesUrl = siteUrl + "/Users/" + userId + "/Items" + apikey + "&Fields=MediaStreams,parentId,CommunityRating" + "&parentid=" + item.optString("Id") + "&ExcludeItemIds=" + item.optString("Id");
-            JSONArray episodes = new JSONObject(OkHttp.string(episodesUrl)).optJSONArray("Items");
+            JSONObject episodesObject = new JSONObject(OkHttp.string(episodesUrl));
+            currentEpisodesJSONObject = episodesObject;
+            JSONArray episodes = episodesObject.optJSONArray("Items");
 
             StringBuilder urlBuilder = new StringBuilder();
             StringBuilder fromBuilder = new StringBuilder();
@@ -391,7 +395,7 @@ public class Emby extends Spider {
                     String episodeName = episode.optString("Name");
                     String episodeIndexNumber = episode.optString("IndexNumber");
                     String episodePlayUrl = siteUrl + "/Videos/" + episode.optString("Id") + "/stream." + media.optString("Container") + apikey + "&static=true" + "&MediaSourceId=" + media.optString("Id");
-                    builderMap.get(Integer.toString(j)).append(episodeIndexNumber).append("^^").append(episodeName).append("$").append(episodePlayUrl).append("#");
+                    builderMap.get(Integer.toString(j)).append(episodeIndexNumber).append("^^").append(episodeIndexNumber).append(".").append(episodeName).append("$").append(episodePlayUrl).append("#");
                 }
             }
 
@@ -486,16 +490,65 @@ public class Emby extends Spider {
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
+        String title = danmuVod.getVodName();
+        String routeNames = danmuVod.getVodPlayFrom();
+        String routeValues = danmuVod.getVodPlayUrl();
+        // 目标线路名称和 URL
+        int episodeNumber = "tv".equals(danmuVod.getVodMediaType()) ? Douban.findEpisode(routeNames, routeValues, flag, id) : 1;
+        List<Sub> subs = parseSubtitle(episodeNumber - 1, generateFlagIndex(flag, routeNames));
+        Result result = Result.get().url(id);
+        if (!subs.isEmpty()) result = result.subs(subs);
         if (this.isDanmu.equals("true")) {
-            String title = danmuVod.getVodName();
-            String routeNames = danmuVod.getVodPlayFrom();
-            String routeValues = danmuVod.getVodPlayUrl();
-            // 目标线路名称和 URL
-            int episodeNumber = "tv".equals(danmuVod.getVodMediaType()) ? Douban.findEpisode(routeNames, routeValues, flag, id) : 1;
             String danmaku = Danmaku.getDanmaku(title, episodeNumber);
-            return Result.get().url(id).danmaku(danmaku).string();
+            result = result.danmaku(danmaku);
         }
-        else return Result.get().url(id).string();
+        return result.string();
+    }
+
+    private int generateFlagIndex(String flag, String routeNames) {
+        try {
+            String[] routeNamesArray = routeNames.split("\\$\\$\\$");
+            for (int i = 0; i < routeNamesArray.length; i++) {
+                if (routeNamesArray[i].equals(flag)) return i;
+            }
+            return -1;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return -1;
+        }
+    }
+
+    public JSONObject getCurrentEpisodesJSONObject() {
+        return currentEpisodesJSONObject;
+    }
+
+    public List<Sub> parseSubtitle(int index, int flagIndex) {
+        try {
+            List<Sub> subList = new ArrayList<>();
+            JSONObject episode = currentEpisodesJSONObject.optJSONArray("Items").optJSONObject(index);
+            JSONObject mediaSource = episode.optJSONArray("MediaSources").optJSONObject(flagIndex);
+            JSONArray mediaStreams = mediaSource.optJSONArray("MediaStreams");
+            for (int i = 0; i < mediaStreams.length(); i++) {
+                JSONObject mediaStream = mediaStreams.optJSONObject(i);
+                if (!"Subtitle".equals(mediaStream.optString("Type")) || !"true".equals(mediaStream.optString("IsExternal"))) continue;
+                Sub sub = Sub.create()
+                        .ext(mediaStream.optString("Codec"))
+                        .lang(mediaStream.optString("Language"))
+                        .name(mediaStream.optString("DisplayTitle"))
+                        .url(String.format(Locale.CHINA,"%s/videos/%s/%s/Subtitles/%d/stream.%s%s",
+                                siteUrl,
+                                episode.optString("Id"),
+                                mediaSource.optString("Id"),
+                                i,
+                                mediaStream.optString("Codec"),
+                                apikey));
+                subList.add(sub);
+            }
+            return subList;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
     }
     
     private String timeConvert(String durationString){

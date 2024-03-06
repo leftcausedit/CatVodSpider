@@ -9,8 +9,11 @@ import com.github.catvod.bean.Result;
 import com.github.catvod.bean.Vod;
 import com.github.catvod.bean.star.Card;
 import com.github.catvod.bean.star.Condition;
-import com.github.catvod.bean.star.Detail;
+import com.github.catvod.bean.star.Group;
+import com.github.catvod.bean.star.Info;
+import com.github.catvod.bean.star.Person;
 import com.github.catvod.bean.star.Query;
+import com.github.catvod.bean.star.Video;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Util;
@@ -26,8 +29,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import okhttp3.OkHttpClient;
-
 public class Star extends Spider {
 
     private static final String apiUrl = "https://aws.ulivetv.net/v3/web/api/filter";
@@ -40,23 +41,13 @@ public class Star extends Spider {
     private Map<String, String> getHeader() {
         Map<String, String> headers = new HashMap<>();
         headers.put("User-Agent", Util.CHROME);
-        headers.put("Cookie", "userIP=127.0.0.1; aws-waf-token=");
         headers.put("Referer", siteUrl);
         return headers;
     }
 
     private String getVer() {
-        for (Element script : Jsoup.parse(OkHttp.string(client(), siteUrl, getHeader())).select("script")) if (script.attr("src").contains("buildManifest.js")) return script.attr("src").split("/")[3];
+        for (Element script : Jsoup.parse(OkHttp.string(siteUrl, getHeader())).select("script")) if (script.attr("src").contains("buildManifest.js")) return script.attr("src").split("/")[3];
         return "";
-    }
-
-    @Override
-    public OkHttpClient client() {
-        try {
-            return super.client();
-        } catch (Throwable e) {
-            return OkHttp.client();
-        }
     }
 
     @Override
@@ -66,7 +57,6 @@ public class Star extends Spider {
         map.put("drama", "电视剧");
         map.put("animation", "动漫");
         map.put("variety", "综艺");
-        map.put("documentary", "纪录片");
         ver = getVer();
     }
 
@@ -76,7 +66,7 @@ public class Star extends Spider {
         LinkedHashMap<String, List<Filter>> filters = new LinkedHashMap<>();
         for (Map.Entry<String, String> entry : map.entrySet()) classes.add(new Class(entry.getKey(), entry.getValue()));
         for (Class type : classes) {
-            Element script = Jsoup.parse(OkHttp.string(client(), siteUrl + type.getTypeId() + "/all/all/all", getHeader())).select("#__NEXT_DATA__").get(0);
+            Element script = Jsoup.parse(OkHttp.string(siteUrl + type.getTypeId() + "/all/all/all", getHeader())).select("#__NEXT_DATA__").get(0);
             JSONObject obj = new JSONObject(script.data()).getJSONObject("props").getJSONObject("pageProps").getJSONObject("filterCondition");
             Condition item = Condition.objectFrom(obj.toString());
             filters.put(type.getTypeId(), item.getFilter());
@@ -87,7 +77,7 @@ public class Star extends Spider {
     @Override
     public String homeVideoContent() throws Exception {
         List<Vod> list = new ArrayList<>();
-        Element script = Jsoup.parse(OkHttp.string(client(), siteUrl, getHeader())).select("#__NEXT_DATA__").get(0);
+        Element script = Jsoup.parse(OkHttp.string(siteUrl, getHeader())).select("#__NEXT_DATA__").get(0);
         List<Card> cards = Card.arrayFrom(new JSONObject(script.data()).getJSONObject("props").getJSONObject("pageProps").getJSONArray("cards").toString());
         for (Card card : cards) if (!card.getName().equals("电视直播")) for (Card item : card.getCards()) list.add(item.vod());
         return Result.string(list);
@@ -95,6 +85,7 @@ public class Star extends Spider {
 
     @Override
     public String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend) throws Exception {
+        if (tid.endsWith("/{pg}")) return searchContent(tid.split("/")[0], true);
         String year = extend.containsKey("year") ? extend.get("year") : "";
         String type = extend.containsKey("type") ? extend.get("type") : "";
         String area = extend.containsKey("area") ? extend.get("area") : "";
@@ -114,38 +105,49 @@ public class Star extends Spider {
 
     @Override
     public String detailContent(List<String> ids) throws Exception {
-        Element script = Jsoup.parse(OkHttp.string(client(), detail.concat(ids.get(0)), getHeader())).select("#__NEXT_DATA__").get(0);
-        Detail detail = Detail.objectFrom(new JSONObject(script.data()).getJSONObject("props").getJSONObject("pageProps").getJSONObject("pageData").toString());
+        Element script = Jsoup.parse(OkHttp.string(detail.concat(ids.get(0)), getHeader())).select("#__NEXT_DATA__").get(0);
+        Info detail = Info.objectFrom(new JSONObject(script.data()).getJSONObject("props").getJSONObject("pageProps").getJSONObject("collectionInfo").toString());
         Vod vod = new Vod();
         vod.setVodId(ids.get(0));
-        vod.setVodPic(detail.getPicurl());
         vod.setVodYear(detail.getTime());
         vod.setVodName(detail.getName());
+        vod.setVodPic(detail.getPicurl());
         vod.setVodArea(detail.getCountry());
-        vod.setVodActor(detail.getActor());
-        vod.setVodRemarks(detail.getCountStr());
         vod.setVodContent(detail.getDesc());
-        vod.setVodDirector(detail.getDirector());
-        vod.setTypeName(detail.getLabel());
-        vod.setVodPlayFrom("FongMi");
+        vod.setVodRemarks(detail.getCountStr());
+        vod.setVodActor(convert(detail.getActor()));
+        vod.setVodDirector(convert(detail.getDirector()));
+        List<String> playFrom = new ArrayList<>();
         List<String> playUrls = new ArrayList<>();
-        for (Detail.Video video : detail.getVideos()) playUrls.add(video.getEporder() + "$" + video.getPurl());
-        vod.setVodPlayUrl(TextUtils.join("#", playUrls));
+        for (Group group : detail.getVideosGroup()) {
+            List<String> urls = new ArrayList<>();
+            for (Video video : group.getVideos()) urls.add(video.getEporder() + "$" + video.getPurl());
+            playUrls.add(TextUtils.join("#", urls));
+            playFrom.add(group.getName());
+        }
+        vod.setVodPlayUrl(TextUtils.join("$$$", playUrls));
+        vod.setVodPlayFrom(TextUtils.join("$$$", playFrom));
         return Result.string(vod);
     }
 
     @Override
     public String searchContent(String key, boolean quick) throws Exception {
         List<Vod> list = new ArrayList<>();
-        String json = OkHttp.string(client(), siteUrl + data + ver + "/search.json?word=" + URLEncoder.encode(key), getHeader());
+        String json = OkHttp.string(siteUrl + data + ver + "/search.json?word=" + URLEncoder.encode(key), getHeader());
         List<Card> items = Card.arrayFrom(new JSONObject(json).getJSONObject("pageProps").getJSONArray("initList").toString());
         for (Card item : items) list.add(item.vod());
-        return Result.string(list);
+        return Result.get().vod(list).page().string();
     }
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
         return Result.get().url(id).string();
+    }
+
+    private String convert(List<Person> items) {
+        StringBuilder sb = new StringBuilder();
+        for (Person item : items) sb.append(String.format("[a=cr:{\"id\":\"%s\",\"name\":\"%s\"}/]%s[/a]", item.getName() + "/{pg}", item.getName(), item.getName())).append(",");
+        return Util.substring(sb.toString());
     }
 }
 

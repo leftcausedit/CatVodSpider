@@ -1,5 +1,7 @@
 package com.github.catvod.spider;
 
+import android.content.Context;
+
 import com.github.catvod.bean.Class;
 import com.github.catvod.bean.Result;
 import com.github.catvod.bean.Vod;
@@ -16,7 +18,12 @@ import java.util.List;
 
 public class Eighteen extends Spider {
 
-    private final String url = "https://maa1815.com/zh/";
+    private final String url = "https://mjv002.com/zh/";
+
+    @Override
+    public void init(Context context, String extend) throws Exception {
+        OkHttp.newCall("https://mjv002.com/zh/chinese_IamOverEighteenYearsOld/19/index.html").close();
+    }
 
     @Override
     public String homeContent(boolean filter) throws Exception {

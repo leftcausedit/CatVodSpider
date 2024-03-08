@@ -9,6 +9,7 @@ import com.github.catvod.bean.jianpian.Data;
 import com.github.catvod.bean.jianpian.Detail;
 import com.github.catvod.bean.jianpian.Resp;
 import com.github.catvod.crawler.Spider;
+import com.github.catvod.danmaku.Danmaku;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Json;
 
@@ -26,6 +27,7 @@ public class Jianpian extends Spider {
 
     private final String siteUrl = "http://api2.rinhome.com";
     private String extend;
+    private Vod danmuVod;
 
     private Map<String, String> getHeader() {
         Map<String, String> headers = new HashMap<>();
@@ -86,12 +88,21 @@ public class Jianpian extends Spider {
         vod.setVodPlayUrl(data.getPlayUrl());
         vod.setVodDirector(data.getDirectors());
         vod.setVodContent(data.getDescription());
+
+        danmuVod = vod;
         return Result.string(vod);
     }
 
     @Override
     public String playerContent(String flag, String id, List<String> vipFlags) throws Exception {
-        return Result.get().url(id).header(getHeader()).string();
+        String title = danmuVod.getVodName();
+        String routeNames = danmuVod.getVodPlayFrom();
+        String routeValues = danmuVod.getVodPlayUrl();
+        int episodeNumber = Douban.findEpisode(routeNames, routeValues, flag, id);
+
+        return Result.get().url(id).header(getHeader())
+                .danmaku(Danmaku.getDanmaku(title, episodeNumber))
+                .string();
     }
 
     @Override

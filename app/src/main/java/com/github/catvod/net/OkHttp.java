@@ -46,10 +46,6 @@ public class OkHttp {
         return string(url, null);
     }
 
-    public static String string(String url, int timeout) {
-        return string(customTimeoutClient(timeout), url, null, null);
-    }
-
     public static String string(String url, Map<String, String> header) {
         return string(url, null, header);
     }

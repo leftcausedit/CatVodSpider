@@ -765,7 +765,7 @@ public class Douban extends Spider {
                     String cmsName = cmsArray.optJSONObject(index).optString("name");
                     String cmsSearchUrl = cmsUrl + "?quick=true&wd=" + key;
 
-                    JSONArray cmsResultArray = new JSONObject(OkHttp.string(cmsSearchUrl, cmsTimeout)).optJSONArray("list");
+                    JSONArray cmsResultArray = new JSONObject(OkHttp.getResult(cmsSearchUrl, cmsTimeout).getBody()).optJSONArray("list");
                     list.addAll(parseVodListFromJSONArrayCmsResult(cmsResultArray, cmsName, index, cmsTimeout));
                 } catch (Exception e) {
                     errorCmsSite.add(index);

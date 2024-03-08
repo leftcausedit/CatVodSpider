@@ -83,7 +83,7 @@ public class MainActivity extends Activity {
 
     public void detailContent() {
         try {
-            Logger.t("detailContent").d(spider.detailContent(Arrays.asList("restore")));
+            Logger.t("detailContent").d(spider.detailContent(Arrays.asList("backup")));
         } catch (Throwable e) {
             e.printStackTrace();
         }

@@ -1,5 +1,6 @@
 package com.github.catvod.spider;
 
+import android.app.Activity;
 import android.content.Context;
 import android.net.Uri;
 
@@ -62,33 +63,29 @@ public class WebdavBackup extends Spider {
         String id = ids.get(0);
         switch (id) {
             case "backup":
-//                backup();
-                Init.execute(() -> {
-                    try {
-                        backup();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                });
-                Notify.show("backup");
+                backup();
+//                Notify.show("备份完成");
                 break;
             case "restore":
-//                restore();
-                Init.execute(() -> {
-                    try {
-                        restore();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                });
-                Notify.show("restore");
+                restore();
+//                Notify.show("恢复完成");
                 break;
             default:
         }
+        Init.run(this::finish);
         Vod vod = new Vod();
         vod.setVodPlayFrom("lefty");
         vod.setVodPlayUrl("lefty$lefty");
         return Result.string(vod);
+    }
+
+    private void finish() {
+        try {
+            Activity activity = Init.getActivity();
+            if (activity != null) activity.finish();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private void backup() throws Exception {
@@ -132,10 +129,10 @@ public class WebdavBackup extends Spider {
         try (ZipInputStream zipInputStream = new ZipInputStream(inputStream)) {
             ZipEntry zipEntry;
             while ((zipEntry = zipInputStream.getNextEntry()) != null) {
+                // 获取文件名
+                String filename = zipEntry.getName().substring(3);
+                File file = new File(Path.tv(), filename);
                 if (!zipEntry.isDirectory()) {
-                    // 获取文件名
-                    String filename = zipEntry.getName().split("/")[1];
-
                     // 读取文件内容到字节数组
                     ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
                     byte[] buffer = new byte[1024];
@@ -149,7 +146,9 @@ public class WebdavBackup extends Spider {
                     byte[] fileBytes = byteArrayOutputStream.toByteArray();
 
                     // 调用自定义的Path.write方法保存文件
-                    Path.write(new File(Path.tv(), filename), fileBytes);
+                    Path.write(file, fileBytes);
+                } else {
+                    file.mkdirs();
                 }
                 zipInputStream.closeEntry();
             }
